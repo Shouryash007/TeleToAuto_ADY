@@ -1,0 +1,26 @@
+NOTE: BEFORE STARTING THE SERVER OR ROBOT MAKE SURE YOU ARE INSIDE THE ENVIRONMENT ( source venv/bin/activate)
+cloudflare: cloudflared tunnel --url http://127.0.0.1:8000
+server: uvicorn server.server:app --host 127.0.0.1 --port 8000
+robot: python file_name.py
+
+Username: operator1
+Password: user1@123
+
+Username: operator2
+Password: user2@123
+
+To create another robot things needed to change:
+1.robot_id
+2.robot_token
+3.Signaling_server
+4.camera_device
+in json add the class of that roboot.
+
+1. Does the Browser show video after restarting the server:
+2. Does the Browser show video after restarting the Robot:
+3. Does the Browser reconeect if the page is refreshed/re-connected:
+4. login working for correct credentials:
+5. after login for specific operator does it show only the alloted robots:
+6. UI working correctly:
+7. after re-login does it show robot status correctly:
+8. If the robot is being used by another operator does it show the status:
