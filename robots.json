@@ -1,0 +1,10 @@
+{
+    "robot_001": {
+        "token": "robot001secretabc",
+        "allowed_users": ["operator1","operator2"]
+    },
+    "robot_002": {
+        "token": "robot002secretdef",
+        "allowed_users": ["operator1"]
+    }
+}

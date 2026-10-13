@@ -1,0 +1,8 @@
+{
+    "operator1": {
+        "password_hash": "pbkdf2_sha256$310000$KYuaNWGlCYoeyM13o8ZA3Q==$JoiVSl5Fe4K7x2q0Jec_SxuZA8fi8ELZFWnRwlqEIZE="
+    },
+    "operator2": {
+        "password_hash": "pbkdf2_sha256$310000$z-bmutObIEt2GAGzUAkhcg==$fl0ZFPOLNnkaeCVE3A-gb4w1ufhKZQFkSdXlexfYMK0="
+    }
+}
