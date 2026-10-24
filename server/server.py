@@ -117,6 +117,12 @@ async def index():
     )
 
 
+@app.get("/api/health")
+async def health():
+    """Simple liveness endpoint; it does not expose credentials."""
+    return {"ok": True, "online_robots": sorted(robot_connections.keys())}
+
+
 @app.get("/app.js")
 async def app_js():
 
@@ -484,12 +490,7 @@ async def websocket_endpoint(
                 return
 
             # ------------------------------------------------
-            # Replace existing browser
-            # ------------------------------------------------
-
-# ------------------------------------------------
-# Only one operator can use a robot at a time
-# ------------------------------------------------
+            # Only one operator can reserve a robot at a time.
 
             existing_browser = browser_connections.get(
                 robot_id

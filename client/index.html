@@ -1,409 +1,164 @@
+
 <!DOCTYPE html>
-
-<html>
-
+<html lang="en">
 <head>
-
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>Remote Robot Portal</title>
 
-    <link
-        rel="stylesheet"
-<<<<<<< HEAD
-<<<<<<< HEAD
-        href="style.css"
-=======
-        href="/style.css"
->>>>>>> 6b11225 (first initialization)
-=======
-        href="style.css"
->>>>>>> bc5dc8b (Fix website CSS and update frontend)
-    >
+    <link rel="stylesheet" href="/style.css">
 
+    <!-- MediaPipe is loaded by app.js when tracking starts. -->
 </head>
 
-
 <body>
+    <!-- =====================================================
+         LOGIN PAGE
+    ====================================================== -->
+    <section id="loginPage" class="page login-page">
+        <div class="login-card">
+            <div class="logo">REMOTE ROBOT</div>
 
+            <h1>Operator Portal</h1>
+            <p class="subtitle">Secure remote teleoperation</p>
 
-<!-- ======================================================
-     LOGIN PAGE
-======================================================= -->
-
-<div
-    id="loginPage"
-    class="page"
->
-
-    <div class="login-card">
-
-        <div class="logo">
-            REMOTE ROBOT
-        </div>
-
-        <h1>
-            Operator Portal
-        </h1>
-
-        <p class="subtitle">
-            Secure remote access
-        </p>
-
-
-        <form id="loginForm">
-
-            <label>
-                Username
-            </label>
-
-            <input
-                id="username"
-                type="text"
-                autocomplete="username"
-                placeholder="Enter username"
-                required
-            >
-
-
-            <label>
-                Password
-            </label>
-
-            <input
-                id="password"
-                type="password"
-                autocomplete="current-password"
-                placeholder="Enter password"
-                required
-            >
-
-
-            <button
-                type="submit"
-                class="primary-button"
-            >
-                LOGIN
-            </button>
-
-        </form>
-
-
-        <p
-            id="loginError"
-            class="error"
-        ></p>
-
-    </div>
-
-</div>
-
-
-<!-- ======================================================
-     ROBOT DASHBOARD
-======================================================= -->
-
-<div
-    id="dashboardPage"
-    class="page hidden"
->
-
-    <header>
-
-        <div>
-
-            <div class="brand">
-                REMOTE ROBOT
-            </div>
-
-            <div class="connection-text">
-                Operator Console
-            </div>
-
-        </div>
-
-
-        <div class="user-section">
-
-            <span id="loggedUser">
-                operator
-            </span>
-
-            <button
-                id="logoutButton"
-                class="logout-button"
-            >
-                Logout
-            </button>
-
-        </div>
-
-    </header>
-
-
-    <main>
-
-
-        <!-- =============================================
-             ROBOT SELECTION
-        ============================================== -->
-
-        <section
-            id="robotSelection"
-            class="panel"
-        >
-
-            <h2>
-                Select Robot
-            </h2>
-
-            <p>
-                Choose an available robot to begin
-                the remote camera session.
-            </p>
-
-
-            <div
-                id="robotList"
-                class="robot-list"
-            >
-            </div>
-
-        </section>
-
-
-        <!-- =============================================
-             CAMERA & TELEOPERATION WORKSPACE
-        ============================================== -->
-
-        <section
-            id="cameraPanel"
-            class="panel hidden"
-        >
-
-            <div class="camera-header">
-
-                <div>
-
-                    <h2>
-                        <span id="currentRobot">
-                            Robot
-                        </span>
-                    </h2>
-
-                    <span
-                        id="connectionStatus"
-                        class="status"
-                    >
-                        Connecting...
-                    </span>
-
-                </div>
-
-
-                <button
-                    id="disconnectButton"
-                    class="danger-button"
+            <form id="loginForm">
+                <label for="username">Username</label>
+                <input
+                    id="username"
+                    name="username"
+                    type="text"
+                    autocomplete="username"
+                    placeholder="Enter username"
+                    required
                 >
-                    Disconnect Robot
+
+                <label for="password">Password</label>
+                <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autocomplete="current-password"
+                    placeholder="Enter password"
+                    required
+                >
+
+                <button type="submit" class="primary-button">
+                    LOGIN
                 </button>
 
+                <p id="loginError" class="error" role="alert"></p>
+            </form>
+        </div>
+    </section>
+
+    <!-- =====================================================
+         OPERATOR DASHBOARD
+    ====================================================== -->
+    <section id="dashboardPage" class="page hidden">
+        <header class="site-header">
+            <div class="brand-block">
+                <div class="brand">REMOTE ROBOT</div>
+                <div class="connection-text">
+                    Operator Teleoperation Console
+                </div>
             </div>
 
-            <div class="operator-workspace">
+            <div class="user-section">
+                <span id="loggedUser">operator</span>
 
-                <!-- Left Column: Remote Video Stream -->
-                <div class="workspace-col workspace-video">
-
-                    <div class="video-container">
-
-                        <video
-                            id="remoteVideo"
-                            autoplay
-                            muted
-                            playsinline
-                            controls
-                        >
-                        </video>
-
-
-                        <div
-                            id="videoOverlay"
-                            class="video-overlay"
-                        >
-
-                            <div class="spinner">
-                            </div>
-
-                            <p>
-                                Connecting to robot...
-                            </p>
-
-                        </div>
-
-                    </div>
-
-                    <div class="camera-info">
-
-                        <span>
-                            CAMERA FEED
-                        </span>
-
-                        <span id="cameraState">
-                            Waiting
-                        </span>
-
-                    </div>
-
-                </div>
-
-                <!-- Right Column: SO-101 Leader Teleoperation -->
-                <div class="workspace-col workspace-leader">
-
-                    <div class="leader-panel">
-
-                        <div class="leader-panel-header">
-                            <div>
-                                <h3>SO-101 Leader Arm</h3>
-                                <div class="badge-group">
-                                    <span id="leaderStatusBadge" class="status-badge badge-disconnected">Disconnected</span>
-                                    <span class="status-badge badge-safety">Verification Only (Motors Disarmed)</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Action Controls -->
-                        <div class="leader-controls">
-                            <button id="connectLeaderButton" class="action-btn btn-primary">
-                                Connect Leader
-                            </button>
-                            <button id="disconnectLeaderButton" class="action-btn btn-secondary" disabled>
-                                Disconnect Leader
-                            </button>
-                            <button id="toggleTransmitButton" class="action-btn btn-transmit" disabled>
-                                Start Sending Data
-                            </button>
-                        </div>
-
-                        <!-- Error / Notice Banner -->
-                        <div id="leaderAlert" class="leader-alert hidden"></div>
-
-                        <!-- Live Joint Verification Table -->
-                        <div class="table-card">
-                            <div class="table-card-header">
-                                <span class="table-title">Live Joint Verification Table</span>
-                                <span id="dataFreshnessDot" class="freshness-dot dot-gray" title="Data state"></span>
-                            </div>
-                            <div class="table-wrapper">
-                                <table class="joint-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Joint</th>
-                                            <th class="text-right">Current Position</th>
-                                            <th>Unit</th>
-                                            <th>Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr id="row_shoulder_pan">
-                                            <td class="joint-name">shoulder_pan</td>
-                                            <td class="pos-cell" id="pos_shoulder_pan">--</td>
-                                            <td class="unit-cell">degrees</td>
-                                            <td class="status-cell" id="status_shoulder_pan">Waiting</td>
-                                        </tr>
-                                        <tr id="row_shoulder_lift">
-                                            <td class="joint-name">shoulder_lift</td>
-                                            <td class="pos-cell" id="pos_shoulder_lift">--</td>
-                                            <td class="unit-cell">degrees</td>
-                                            <td class="status-cell" id="status_shoulder_lift">Waiting</td>
-                                        </tr>
-                                        <tr id="row_elbow_flex">
-                                            <td class="joint-name">elbow_flex</td>
-                                            <td class="pos-cell" id="pos_elbow_flex">--</td>
-                                            <td class="unit-cell">degrees</td>
-                                            <td class="status-cell" id="status_elbow_flex">Waiting</td>
-                                        </tr>
-                                        <tr id="row_wrist_flex">
-                                            <td class="joint-name">wrist_flex</td>
-                                            <td class="pos-cell" id="pos_wrist_flex">--</td>
-                                            <td class="unit-cell">degrees</td>
-                                            <td class="status-cell" id="status_wrist_flex">Waiting</td>
-                                        </tr>
-                                        <tr id="row_wrist_roll">
-                                            <td class="joint-name">wrist_roll</td>
-                                            <td class="pos-cell" id="pos_wrist_roll">--</td>
-                                            <td class="unit-cell">degrees</td>
-                                            <td class="status-cell" id="status_wrist_roll">Waiting</td>
-                                        </tr>
-                                        <tr id="row_gripper">
-                                            <td class="joint-name">gripper</td>
-                                            <td class="pos-cell" id="pos_gripper">--</td>
-                                            <td class="unit-cell">%</td>
-                                            <td class="status-cell" id="status_gripper">Waiting</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <!-- Telemetry / Status Footer -->
-                        <div class="leader-telemetry">
-                            <div class="telemetry-item">
-                                <span class="telem-label">Last Updated:</span>
-                                <span class="telem-value" id="leaderLastUpdated">Waiting for leader connection</span>
-                            </div>
-                            <div class="telemetry-item">
-                                <span class="telem-label">Polling Rate:</span>
-                                <span class="telem-value" id="leaderFrequency">--</span>
-                            </div>
-                            <div class="telemetry-item">
-                                <span class="telem-label">DataChannel (encoder-control):</span>
-                                <span class="telem-value" id="dcChannelStatus">Waiting</span>
-                            </div>
-                            <div class="telemetry-item">
-                                <span class="telem-label">Transmission:</span>
-                                <span class="telem-value" id="dcTxStatus">Idle</span>
-                            </div>
-                            <div class="telemetry-item">
-                                <span class="telem-label">Last Sent Sequence:</span>
-                                <span class="telem-value" id="dcLastSeq">--</span>
-                            </div>
-                        </div>
-
-                        <!-- Safety Note -->
-                        <div class="safety-box">
-                            <span class="safety-icon">🔒</span>
-                            <span><strong>Safety Isolated:</strong> Remote follower motors are not energized. Joint data transmitted over WebRTC DataChannel is received and logged for verification only.</span>
-                        </div>
-
-                    </div>
-
-                </div>
-
+                <button
+                    id="logoutButton"
+                    class="secondary-button"
+                    type="button"
+                    onclick="if (typeof disconnectFromRobot === 'function') disconnectFromRobot(); if (typeof disconnectEsp32Imu === 'function') disconnectEsp32Imu(); sessionStorage.clear(); window.location.reload();"
+                >
+                    Logout
+                </button>
             </div>
+        </header>
 
-        </section>
+        <main>
+            <!-- =============================================
+                 ROBOT SELECTION
+            ============================================== -->
+            <section id="robotSelection" class="panel">
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">ROBOT ACCESS</p>
+                        <h2>Select Robot</h2>
+                        <p>
+                            Select an available robot to open its
+                            teleoperation session.
+                        </p>
+                    </div>
+                </div>
 
-    </main>
+                <div id="robotList" class="robot-list">
+                    <p>Loading robots...</p>
+                </div>
+            </section>
 
-</div>
+            <!-- =============================================
+                 ROBOT CONNECTION AND CAMERA WORKSPACE
+                 The JavaScript inserts the four-panel console
+                 immediately after this section.
+            ============================================== -->
+            <section id="cameraPanel" class="panel hidden">
+                <div class="camera-header">
+                    <div>
+                        <p class="eyebrow">ACTIVE SESSION</p>
+                        <h2 id="currentRobot">Robot</h2>
+                        <span
+                            id="connectionStatus"
+                            class="status"
+                            role="status"
+                        >
+                            Connecting...
+                        </span>
+                    </div>
 
+                    <button
+                        id="disconnectButton"
+                        class="danger-button"
+                        type="button"
+                        onclick="disconnectFromRobot()"
+                    >
+                        Disconnect Robot
+                    </button>
+                </div>
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<script src="app.js"></script>
-=======
-<script src="/app.js"></script>
->>>>>>> 6b11225 (first initialization)
-=======
-<script src="app.js"></script>
->>>>>>> bc5dc8b (Fix website CSS and update frontend)
+                <!-- Fallback video container before the dynamic
+                     teleoperation panel is initialized. -->
+                <div class="video-container">
+                    <video
+                        id="remoteVideo"
+                        autoplay
+                        muted
+                        playsinline
+                    ></video>
 
+                    <div id="videoOverlay" class="video-overlay">
+                        <div class="spinner"></div>
+                        <p>Waiting for robot camera...</p>
+                    </div>
+                </div>
+
+                <div class="camera-info">
+                    <span>ROBOT CAMERA</span>
+                    <span id="cameraState">Waiting</span>
+                </div>
+            </section>
+        </main>
+
+        <footer class="site-footer">
+            <span>Remote Robot Portal</span>
+            <span>Simulation-first teleoperation</span>
+        </footer>
+    </section>
+
+    <!-- Load the operator-side application. -->
+    <script src="/app.js"></script>
 </body>
-
 </html>
