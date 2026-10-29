@@ -85,8 +85,8 @@ export function createHandTracker({
     onHands,
     onStatus,
     onCameraLost,
-    onStartGesture, 
-    onStopGesture  
+    onStartGesture,
+    onStopGesture
 } = {}) {
     let stream = null;
     let video = null;
@@ -103,7 +103,7 @@ export function createHandTracker({
 
     let latestPose = null;
     let latestHands = null;
-    let lastGestureTime = 0; 
+    let lastGestureTime = 0;
 
     function ensureModels() {
         if (!poseModel) {
@@ -156,7 +156,7 @@ export function createHandTracker({
                     const middleFolded = hand[12].y > hand[9].y;
                     const ringFolded = hand[16].y > hand[13].y;
                     const pinkyFolded = hand[20].y > hand[17].y;
-                    
+
                     if (thumbUp && indexFolded && middleFolded && ringFolded) {
                         thumbsUpCount++;
                     } else if (indexFolded && middleFolded && ringFolded && pinkyFolded) {
@@ -187,8 +187,8 @@ export function createHandTracker({
 
         if (!poseBusy) {
             poseBusy = true;
-            try { await poseModel.send({ image: video }); } 
-            catch (error) { console.warn("[POSE] Frame processing failed:", error); } 
+            try { await poseModel.send({ image: video }); }
+            catch (error) { console.warn("[POSE] Frame processing failed:", error); }
             finally { poseBusy = false; }
         }
 
@@ -196,8 +196,8 @@ export function createHandTracker({
 
         if (!handsBusy) {
             handsBusy = true;
-            try { await handsModel.send({ image: video }); } 
-            catch (error) { console.warn("[HANDS] Frame processing failed:", error); } 
+            try { await handsModel.send({ image: video }); }
+            catch (error) { console.warn("[HANDS] Frame processing failed:", error); }
             finally { handsBusy = false; }
         }
 
@@ -208,16 +208,16 @@ export function createHandTracker({
         if (!p1 || !p2) return;
         const x1 = p1.x * width, y1 = p1.y * height;
         const x2 = p2.x * width, y2 = p2.y * height;
-        
+
         const dx = x2 - x1;
         const dy = y2 - y1;
         const len = Math.hypot(dx, dy);
         if (len < 1e-3) return;
-        
+
         const nx = -dy / len;
         const ny = dx / len;
         const offset = 30; // Border width
-        
+
         // Transparent Center region
         ctx.lineWidth = 40;
         ctx.strokeStyle = "rgba(49, 230, 161, 0.2)";
@@ -250,7 +250,7 @@ export function createHandTracker({
             drawArmSegment(poseLandmarks[13], poseLandmarks[15], width, height); // L Elbow -> L Wrist
             drawArmSegment(poseLandmarks[12], poseLandmarks[14], width, height); // R Shoulder -> R Elbow
             drawArmSegment(poseLandmarks[14], poseLandmarks[16], width, height); // R Elbow -> R Wrist
-            
+
             ctx.lineWidth = 4;
             ctx.strokeStyle = "#31e6a1";
             ctx.beginPath();
@@ -263,7 +263,7 @@ export function createHandTracker({
             ctx.strokeStyle = "#66b7ff";
             ctx.lineWidth = 3;
             for (const hand of handLandmarks) {
-                const fingerPaths = [[0, 1, 2, 3, 4], [0, 5, 6, 7, 8]]; 
+                const fingerPaths = [[0, 1, 2, 3, 4], [0, 5, 6, 7, 8]];
                 for (const path of fingerPaths) {
                     ctx.beginPath();
                     for (let i = 0; i < path.length; i++) {

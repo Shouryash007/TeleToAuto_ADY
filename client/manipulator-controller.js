@@ -8,8 +8,8 @@ export const CONTROL = {
     smoothingAlpha: 0.35,
 
     // Proportional Pinch thresholds
-    pinchCloseDistance: 0.04, 
-    pinchOpenDistance: 0.10, 
+    pinchCloseDistance: 0.04,
+    pinchOpenDistance: 0.10,
 
     swapHandedness: false,
 
@@ -82,15 +82,15 @@ export function estimateProportionalGripper(hand) {
     if (!hand || hand.length < 21) return 0;
 
     const pinchDistance = distance2D(hand[4], hand[8]);
-    
+
     // Map distance to a 0-100 percentage (0 = open, 100 = closed)
     if (pinchDistance <= CONTROL.pinchCloseDistance) return 100;
     if (pinchDistance >= CONTROL.pinchOpenDistance) return 0;
-    
+
     const range = CONTROL.pinchOpenDistance - CONTROL.pinchCloseDistance;
     const offset = pinchDistance - CONTROL.pinchCloseDistance;
     const percent = 100 - ((offset / range) * 100);
-    
+
     return clamp(percent, 0, 100);
 }
 
