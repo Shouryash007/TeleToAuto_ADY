@@ -1,4 +1,32 @@
-venv/
+# Python
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Node.js
+node_modules/
+**/node_modules/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Generated files
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Local editor settings
+.vscode/
+.idea/
+
+# Installer
 cloudflared-linux-amd64.deb
