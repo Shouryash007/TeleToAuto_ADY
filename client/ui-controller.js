@@ -321,56 +321,24 @@ export function createUi(handlers = {}) {
                 <section class="teleop-card">
                     <h3>4. IMU / Camera Orientation</h3>
                     <div class="teleop-status">
-                        IMU channel:
-                        <span id="imuChannelStatus">WAITING</span>
-                    </div>
-                    <div class="teleop-status">
-                        ESP32:
-                        <span id="imuSerialStatus">NOT CONNECTED</span>
+                        Mobile sensor:
+                        <span id="imuChannelStatus">WAITING FOR PHONE</span>
                     </div>
 
-                    <div class="teleop-actions">
-                        <button id="connectImuButton" type="button">
-                            Connect ESP32
-                        </button>
-                        <button id="disconnectImuButton" type="button" disabled>
-                            Disconnect ESP32
-                        </button>
-                    </div>
-
-                    <div class="orientation-values">
+                    <div class="orientation-values mobile-orientation-values">
                         <div>
-                            <span>Yaw</span>
-                            <strong id="imuYaw">0.000 rad</strong>
+                            <span>GX · Yaw</span>
+                            <strong id="imuGx">0.0°</strong>
                         </div>
                         <div>
-                            <span>Pitch</span>
-                            <strong id="imuPitch">0.000 rad</strong>
-                        </div>
-                        <div>
-                            <span>Roll</span>
-                            <strong id="imuRoll">0.000 rad</strong>
-                        </div>
-                    </div>
-
-                    <div class="orientation-values">
-                        <div>
-                            <span>Camera yaw target</span>
-                            <strong id="cameraYawTarget">0.0°</strong>
-                        </div>
-                        <div>
-                            <span>Camera pitch target</span>
-                            <strong id="cameraPitchTarget">0.0°</strong>
-                        </div>
-                        <div>
-                            <span>Camera roll target</span>
-                            <strong id="cameraRollTarget">0.0°</strong>
+                            <span>GY · Pitch</span>
+                            <strong id="imuGy">0.0°</strong>
                         </div>
                     </div>
 
                     <p class="teleop-note">
-                        Orientation values are received from the ESP32.
-                        Camera movement depends on the simulation's configured axes.
+                        Live relative orientation received from the authenticated mobile phone.
+                        Keep the phone sensor page open while controlling the robot.
                     </p>
                 </section>
 
@@ -603,6 +571,10 @@ export function createUi(handlers = {}) {
                 margin-top: 14px;
             }
 
+            .mobile-orientation-values {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
             .orientation-values div {
                 padding: 10px 6px;
                 border-radius: 8px;
@@ -700,27 +672,13 @@ export function createUi(handlers = {}) {
     // IMU display
     // -------------------------
     function renderImuReadout(orientation) {
-        setStatus("imuYaw", `${orientation.yaw.toFixed(3)} rad`);
-        setStatus("imuPitch", `${orientation.pitch.toFixed(3)} rad`);
-        setStatus("imuRoll", `${orientation.roll.toFixed(3)} rad`);
+        // Legacy robot IMU feedback is intentionally not displayed in the
+        // phone GX/GY readout, which is reserved for mobile orientation.
     }
 
-    // Camera targets echoed back by the robot (radians -> degrees).
+    // Robot camera-target feedback is not part of the two-value phone card.
     function renderImuFeedback(data) {
-        const orientation = data.orientation || data;
-
-        const show = (id, value) => {
-            if (Number.isFinite(Number(value))) {
-                setStatus(
-                    id,
-                    `${(Number(value) * 180 / Math.PI).toFixed(1)}°`
-                );
-            }
-        };
-
-        show("cameraYawTarget", orientation.yaw);
-        show("cameraPitchTarget", orientation.pitch);
-        show("cameraRollTarget", orientation.roll);
+        // Keep the callback for protocol compatibility; GX/GY come from mobile_imu_readout.
     }
 
     // -------------------------

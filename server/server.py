@@ -472,6 +472,19 @@ async def websocket_endpoint(
                 await websocket.close(code=4004)
                 return
 
+            # The phone is a secondary sensor for the laptop operator.
+            # It must use the same account that currently owns the browser reservation.
+            if (
+                robot_id not in browser_connections
+                or browser_users.get(robot_id) != username
+            ):
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": "Open this robot on the laptop first using the same account."
+                }))
+                await websocket.close(code=4004)
+                return
+
             await websocket.send_text(json.dumps({
                 "type": "mobile_gyro_connected", "robot_id": robot_id, "username": username
             }))
@@ -686,6 +699,23 @@ async def websocket_endpoint(
                         "source": "phone_device_orientation"
                     }
                     await robot.send_text(json.dumps(packet))
+
+                # Also mirror the phone's GX/GY values to the reserved laptop UI.
+                # GX is relative yaw and GY is relative pitch, displayed in degrees.
+                browser = browser_connections.get(robot_id)
+                if browser and browser_users.get(robot_id) == username:
+                    readout = {
+                        "type": "mobile_imu_readout",
+                        "gx": yaw * 180.0 / math.pi,
+                        "gy": pitch * 180.0 / math.pi,
+                        "units": "deg",
+                        "source": "phone_device_orientation",
+                        "timestamp_ms": sent_ms
+                    }
+                    try:
+                        await browser.send_text(json.dumps(readout))
+                    except Exception as exc:
+                        print(f"[MOBILE GYRO] Laptop readout forwarding failed: {exc}")
             elif role == "robot":
 
                 browser = (

@@ -19,11 +19,7 @@ const manipulator = createManipulatorController();
 let robot = null;
 let tracker = null;
 let trackingActive = false;
-let mobileGyroActive = false;
-let latestOrientation = { yaw: 0, pitch: 0, roll: 0 };
-let latestOrientationAt = 0;
 let jointTimer = null;
-let imuTimer = null;
 
 function setStatus(id, value) {
     ui.setStatus(id, value);
@@ -114,7 +110,6 @@ function connectImu() {
 }
 
 function disconnectImu() {
-    latestOrientationAt = 0;
     stopTransmission();
     setStatus("imuChannelStatus", "DISCONNECTED");
 }
@@ -134,22 +129,19 @@ function channelReady(kind) {
 
 function updateTransmission() {
     const ready = channelReady("joint") && channelReady("imu");
-    if (ready && (trackingActive || mobileGyroActive)) startTransmission();
-    else if (!ready || (!trackingActive && !mobileGyroActive)) stopTransmission();
+    if (ready && trackingActive) startTransmission();
+    else if (!ready || !trackingActive) stopTransmission();
 }
 
 function startTransmission() {
-    if (jointTimer || imuTimer) return;
+    if (jointTimer) return;
     jointTimer = window.setInterval(sendJointTargets, 50);
-    imuTimer = window.setInterval(sendOrientation, 1000 / 30);
     setStatus("controlTransmissionStatus", "TRANSMISSION ENABLED");
 }
 
 function stopTransmission() {
     if (jointTimer) clearInterval(jointTimer);
-    if (imuTimer) clearInterval(imuTimer);
     jointTimer = null;
-    imuTimer = null;
     setStatus("controlTransmissionStatus", "STOPPED");
 }
 
@@ -162,15 +154,6 @@ function sendJointTargets() {
     }
     robot.sendJointTargets(targets, manipulator.getGripperClosed());
     ui.updateJointTargets(targets);
-}
-
-function sendOrientation() {
-    if (!robot || !channelReady("imu")) return;
-    if (!latestOrientationAt || Date.now() - latestOrientationAt > 500) {
-        setStatus("imuChannelStatus", "WAITING FOR FRESH ORIENTATION");
-        return;
-    }
-    robot.sendHeadOrientation(latestOrientation);
 }
 
 function handleVisibility() {
@@ -191,17 +174,11 @@ function updatePhoneImu(data) {
     const gy = Number(data.gy);
     if (!Number.isFinite(gx) || !Number.isFinite(gy)) return;
 
-    latestOrientation = {
-        yaw: gx * Math.PI / 180,
-        pitch: gy * Math.PI / 180,
-        roll: 0
-    };
-    latestOrientationAt = Date.now();
-    mobileGyroActive = true;
-    setStatus("imuGx", `${gx.toFixed(1)}°`);
-    setStatus("imuGy", `${gy.toFixed(1)}°`);
-    setStatus("imuChannelStatus", "PHONE ORIENTATION ACTIVE");
-    updateTransmission();
+    // The phone sends orientation directly to the robot through the server.
+    // This message is only a mirrored laptop readout; do not retransmit it.
+    ui.setStatus("imuGx", `${gx.toFixed(1)}°`);
+    ui.setStatus("imuGy", `${gy.toFixed(1)}°`);
+    ui.setStatus("imuChannelStatus", "PHONE ORIENTATION ACTIVE");
 }
 
 ui.init();
