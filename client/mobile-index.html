@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101722">
+  <title>Phone Gyroscope | Remote Robot</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, -apple-system, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #101722; color: #eef3fb; padding: 20px; }
+    main { width: min(520px, 100%); margin: 0 auto; }
+    .card { background: #182231; border: 1px solid #344155; border-radius: 16px; padding: 20px; margin: 14px 0; }
+    h1 { font-size: 1.45rem; margin: 0 0 6px; }
+    p { color: #aebbd0; line-height: 1.5; }
+    label { display: block; margin: 12px 0 6px; color: #cbd5e4; }
+    input, select, button { width: 100%; border-radius: 10px; padding: 13px; font: inherit; }
+    input, select { border: 1px solid #43536b; background: #0e1520; color: #fff; }
+    button { border: 0; font-weight: 700; cursor: pointer; margin-top: 10px; background: #3d8cff; color: white; }
+    button.secondary { background: #334155; }
+    button.stop { background: #b83b4b; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .status { font-weight: 700; color: #f3c969; }
+    .status.active { color: #65e2a2; }
+    .readings { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .reading { background: #0d141f; border-radius: 12px; padding: 16px 10px; text-align: center; }
+    .reading span { display: block; color: #9eacc1; font-size: .85rem; }
+    .reading strong { display: block; margin-top: 8px; font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+    .hidden { display: none !important; }
+    .hint { font-size: .88rem; }
+  </style>
+</head>
+<body>
+<main>
+  <section class="card">
+    <h1>Phone Gyroscope</h1>
+    <p>Minimal sensor page. It sends only GX and GY readings to the robot simulation. Keep your laptop operator page open separately.</p>
+    <div id="status" class="status" role="status">Not logged in</div>
+  </section>
+
+  <section id="loginCard" class="card">
+    <h2>Sign in</h2>
+    <form id="loginForm">
+      <label for="username">Username</label>
+      <input id="username" autocomplete="username" required>
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+      <label for="robotId">Robot ID</label>
+      <input id="robotId" value="robot_001" required>
+      <button type="submit">Login</button>
+      <p id="loginError" class="hint" role="alert"></p>
+    </form>
+  </section>
+
+  <section id="sensorCard" class="card hidden">
+    <h2>Gyroscope input</h2>
+    <p class="hint">Uses the same phone orientation sensor as the website gyro block. Hold the phone in your neutral position and press Calibrate, then rotate it to send relative yaw and pitch angles.</p>
+    <div class="readings">
+      <div class="reading"><span>GX · Yaw</span><strong id="gx">0.0°</strong></div>
+      <div class="reading"><span>GY · Pitch</span><strong id="gy">0.0°</strong></div>
+    </div>
+    <button id="startButton">Enable phone gyroscope</button>
+    <button id="calibrateButton" class="secondary" disabled>Calibrate zero</button>
+    <button id="stopButton" class="stop" disabled>Stop sending</button>
+    <p class="hint">Sensor permission is requested only after pressing Enable. Keep the phone page visible while testing. Values are relative angles in degrees.</p>
+    <button id="logoutButton" class="secondary">Logout</button>
+  </section>
+</main>
+<script src="/mobile-gyro.js"></script>
+</body>
+</html>

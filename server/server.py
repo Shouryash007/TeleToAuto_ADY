@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import secrets
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
@@ -20,8 +21,10 @@ app = FastAPI()
 BASE_DIR = Path(__file__).resolve().parent.parent
 CLIENT_DIR = BASE_DIR / "client"
 
-USERS_FILE = BASE_DIR / "users.json"
-ROBOTS_FILE = BASE_DIR / "robots.json"
+CREDENTIALS_DIR = BASE_DIR / "Credentials"
+
+USERS_FILE = CREDENTIALS_DIR / "users.json"
+ROBOTS_FILE = CREDENTIALS_DIR / "robots.json"
 
 
 # ============================================================
@@ -137,6 +140,16 @@ async def style_css():
     return FileResponse(
         CLIENT_DIR / "style.css"
     )
+
+
+@app.get("/mobile")
+async def mobile_gyro_page():
+    """Lightweight phone-only gyroscope controller; separate from laptop UI."""
+    return FileResponse(CLIENT_DIR / "mobile-index.html")
+
+@app.get("/mobile-gyro.js")
+async def mobile_gyro_js():
+    return FileResponse(CLIENT_DIR / "mobile-gyro.js", media_type="application/javascript")
 
 
 # ============================================================
@@ -397,6 +410,46 @@ async def websocket_endpoint(
         # BROWSER AUTHENTICATION
         # ====================================================
 
+        elif role == "mobile_gyro":
+            # Phone sensor connections are independent from the laptop browser session.
+            # They authenticate separately and never replace browser_connections.
+            session_token = data.get("token")
+            robot_id = data.get("robot_id")
+            username = sessions.get(session_token)
+            if not username:
+                await websocket.send_text(json.dumps({
+                    "type": "error", "message": "Invalid mobile session. Please log in again."
+                }))
+                await websocket.close(code=4003)
+                return
+
+            robot = ROBOTS.get(robot_id)
+            if not robot:
+                await websocket.send_text(json.dumps({
+                    "type": "error", "message": "Robot does not exist"
+                }))
+                await websocket.close(code=4001)
+                return
+
+            if username not in robot.get("allowed_users", []):
+                await websocket.send_text(json.dumps({
+                    "type": "error", "message": "You are not authorized to access this robot"
+                }))
+                await websocket.close(code=4003)
+                return
+
+            if robot_id not in robot_connections:
+                await websocket.send_text(json.dumps({
+                    "type": "error", "message": "Robot is offline"
+                }))
+                await websocket.close(code=4004)
+                return
+
+            await websocket.send_text(json.dumps({
+                "type": "mobile_gyro_connected", "robot_id": robot_id, "username": username
+            }))
+            print(f"[MOBILE GYRO] {username} connected to {robot_id}")
+
         elif role == "browser":
 
             session_token = data.get(
@@ -574,7 +627,39 @@ async def websocket_endpoint(
             # ROBOT -> BROWSER
             # ------------------------------------------------
 
-            if role == "robot":
+            if role == "mobile_gyro":
+                # Phone uses the same calibrated DeviceOrientation angles as the website.
+                if message_type != "head_orientation":
+                    continue
+                orientation = data.get("orientation")
+                if not isinstance(orientation, dict):
+                    continue
+                try:
+                    yaw = float(orientation.get("yaw"))
+                    pitch = float(orientation.get("pitch"))
+                    roll = float(orientation.get("roll", 0.0))
+                    sent_ms = float(data.get("timestamp_ms"))
+                except (TypeError, ValueError):
+                    continue
+                import math
+                if (
+                    not all(math.isfinite(v) for v in (yaw, pitch, roll, sent_ms))
+                    or abs((time.time() * 1000.0) - sent_ms) > 1000.0
+                    or any(abs(v) > math.pi for v in (yaw, pitch, roll))
+                ):
+                    continue
+                robot = robot_connections.get(robot_id)
+                if robot:
+                    packet = {
+                        "type": "head_orientation",
+                        "sequence": data.get("sequence"),
+                        "timestamp_ms": data.get("timestamp_ms"),
+                        "units": "rad",
+                        "orientation": {"yaw": yaw, "pitch": pitch, "roll": roll},
+                        "source": "phone_device_orientation"
+                    }
+                    await robot.send_text(json.dumps(packet))
+            elif role == "robot":
 
                 browser = (
                     browser_connections.get(

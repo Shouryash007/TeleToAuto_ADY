@@ -26,7 +26,7 @@ from aiortc import (
 
 ROBOT_ID = os.getenv("ROBOT_ID", "robot_001")
 ROBOT_TOKEN = os.getenv("ROBOT_TOKEN", "robot001secretabc")
-SIGNALING_SERVER = os.getenv("SIGNALING_SERVER", "ws://127.0.0.1:8000/ws")
+SIGNALING_SERVER = os.getenv("SIGNALING_SERVER", "ws://127.0.0.1:5000/ws")
 # Physical camera transmission is disabled by default.
 # Gazebo camera integration will supply the simulated video separately.
 CAMERA_DEVICE = os.getenv("CAMERA_DEVICE", "")
@@ -178,6 +178,35 @@ def validate_joint_targets(data):
 
 
 def validate_head_orientation(data):
+    """Validate two-axis gyroscope angular velocity (gx, gy), in deg/s."""
+    if data.get("type") != "head_gyro":
+        return None
+    gyro = data.get("gyro")
+    if not isinstance(gyro, dict):
+        return None
+    sent_ms = finite_number(data.get("timestamp_ms"))
+    if sent_ms is None or abs((time.time() * 1000.0) - sent_ms) > 1000.0:
+        print("[SAFETY] Rejecting stale/invalid gyroscope timestamp")
+        return None
+    values = {}
+    for name in ("gx", "gy"):
+        number = finite_number(gyro.get(name))
+        # Broad sanity limit for angular velocity; tune to the sensor/firmware.
+        if number is None or abs(number) > 2000.0:
+            print(f"[SAFETY] Rejecting invalid gyro {name}={gyro.get(name)!r}")
+            return None
+        values[name] = number
+    return {
+        "type": "head_gyro",
+        "sequence": data.get("sequence"),
+        "timestamp_ms": data.get("timestamp_ms"),
+        "units": "deg/s",
+        "gyro": values,
+    }
+
+
+def validate_phone_orientation(data):
+    """Validate relative yaw/pitch angles in radians from the phone page."""
     if data.get("type") != "head_orientation":
         return None
     orientation = data.get("orientation")
@@ -185,14 +214,13 @@ def validate_head_orientation(data):
         return None
     sent_ms = finite_number(data.get("timestamp_ms"))
     if sent_ms is None or abs((time.time() * 1000.0) - sent_ms) > 1000.0:
-        print("[SAFETY] Rejecting stale/invalid IMU packet timestamp")
+        print("[SAFETY] Rejecting stale/invalid phone orientation timestamp")
         return None
     values = {}
     for name in ("yaw", "pitch", "roll"):
-        number = finite_number(orientation.get(name))
-        # Reject clearly corrupt/unbounded radians.
-        if number is None or abs(number) > (2.0 * math.pi):
-            print(f"[SAFETY] Rejecting invalid IMU {name}={orientation.get(name)!r}")
+        number = finite_number(orientation.get(name, 0.0))
+        if number is None or abs(number) > math.pi:
+            print(f"[SAFETY] Rejecting invalid orientation {name}={orientation.get(name)!r}")
             return None
         values[name] = number
     return {
@@ -201,6 +229,7 @@ def validate_head_orientation(data):
         "timestamp_ms": data.get("timestamp_ms"),
         "units": "rad",
         "orientation": values,
+        "source": "phone_device_orientation",
     }
 
 
@@ -262,12 +291,12 @@ async def create_webrtc_session(websocket):
                 return
             packet = validate_head_orientation(data)
             if packet is None:
-                print("[DATA] Dropped invalid IMU packet")
+                print("[DATA] Dropped invalid gx/gy packet")
                 return
-            print("[IMU]", packet["orientation"])
+            print("[GYRO]", packet["gyro"])
             send_to_gazebo(packet)
         except Exception as exc:
-            print("[DATA] Invalid IMU message:", repr(exc))
+            print("[DATA] Invalid gx/gy message:", repr(exc))
 
     @pc.on("connectionstatechange")
     async def connection_state_change():
@@ -320,6 +349,22 @@ async def run_robot():
                         if camera is not None:
                             camera.stop()
                         pc, camera, joint_channel, imu_channel = await create_webrtc_session(websocket)
+                    elif msg_type == "head_gyro":
+                        # Backward-compatible angular-velocity packet path.
+                        packet = validate_head_orientation(data)
+                        if packet is None:
+                            print("[MOBILE GYRO] Dropped invalid/stale gx/gy packet")
+                            continue
+                        print("[MOBILE GYRO]", packet["gyro"])
+                        send_to_gazebo(packet)
+                    elif msg_type == "head_orientation":
+                        # Phone-only page now uses the same relative angle method as the website.
+                        packet = validate_phone_orientation(data)
+                        if packet is None:
+                            print("[MOBILE ORIENTATION] Dropped invalid/stale orientation packet")
+                            continue
+                        print("[MOBILE ORIENTATION]", packet["orientation"])
+                        send_to_gazebo(packet)
                     elif msg_type == "answer":
                         if pc is None:
                             print("[WEBRTC] Answer received without active peer")

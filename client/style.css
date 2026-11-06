@@ -804,3 +804,30 @@ video {
 #robotCameraPlaceholder {
     z-index: 2;
 }
+
+/* =========================================================
+   LAPTOP / MOBILE VR SCENE MODE
+========================================================= */
+.scene-mode-bar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:0 0 18px; padding:12px; border:1px solid var(--border); border-radius:10px; background:#10161d; }
+.scene-mode-label { margin-right:8px; color:var(--muted); font-size:11px; font-weight:700; letter-spacing:1px; }
+.scene-mode-button, .mobile-gyro-controls button { padding:10px 14px; border:1px solid #3b4c60; border-radius:7px; color:#dce6f2; background:#202a35; font-weight:600; }
+.scene-mode-button.active, .scene-action-primary { color:#fff; background:var(--blue); border-color:var(--blue); }
+.mobile-scene-panel { padding:16px; border:1px solid #303949; border-radius:12px; background:#090d13; }
+.mobile-scene-topline { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:14px; }
+.mobile-scene-topline h3 { margin:0 0 6px; }
+.mobile-scene-help { margin:0; color:var(--muted); font-size:12px; }
+.mobile-gyro-status { padding:7px 10px; border-radius:999px; background:#252d37; color:#b8c5d4; font-size:10px; font-weight:700; white-space:nowrap; }
+.mobile-gyro-status.active { background:#123d2b; color:#73e4a7; }
+.mobile-video-mount { position:relative; width:100%; max-width:1000px; margin:0 auto; aspect-ratio:16/9; overflow:hidden; border-radius:10px; background:#000; border:1px solid #252e3a; }
+#mobileRemoteVideo { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000; }
+.mobile-video-placeholder { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:16px; background:#080c12; color:#9ca8ba; text-align:center; font-size:13px; }
+.mobile-video-placeholder.hidden { display:none; }
+.vr-reticle { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); color:rgba(255,255,255,.65); font-size:24px; font-weight:300; pointer-events:none; text-shadow:0 0 5px #000; }
+.mobile-gyro-controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+.mobile-gyro-controls button:disabled { opacity:.45; cursor:not-allowed; }
+.mobile-gyro-values { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; max-width:500px; margin-top:12px; }
+.mobile-gyro-values div { padding:12px; border:1px solid #202a35; border-radius:8px; background:#0d131d; text-align:center; }
+.mobile-gyro-values span, .mobile-gyro-values strong { display:block; }
+.mobile-gyro-values span { margin-bottom:6px; color:var(--muted); font-size:11px; }
+.mobile-gyro-values strong { color:#75b7ff; font:700 20px ui-monospace,monospace; }
+@media (max-width:600px) { .scene-mode-bar { align-items:stretch; } .scene-mode-label { width:100%; } .scene-mode-button { flex:1; } .mobile-scene-panel { padding:10px; } .mobile-scene-topline { flex-direction:column; } .mobile-video-mount { aspect-ratio:9/16; max-height:72vh; } #mobileRemoteVideo { object-fit:cover; } .mobile-gyro-controls button { flex:1 1 100%; } }

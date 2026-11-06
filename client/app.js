@@ -1,10 +1,217 @@
+/* Bundled desktop client: GyroscopeInput + MobileHeadScene + application logic. */
+
+/*
+ * Bluetooth gyroscope input module.
+ * Expected ESP32 BLE service: Nordic UART Service (NUS)
+ * Notify characteristic must emit either JSON {"gx": 1.2, "gy": -3.4}\n
+ * or CSV: 1.2,-3.4\n
+ * Configure window.TELEOP_GYRO_BLE in index.html if your firmware uses
+ * different UUIDs. gx/gy are treated as angular velocity in deg/s.
+ */
+(function () {
+    "use strict";
+
+    const DEFAULTS = {
+        serviceUuid: "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
+        notifyCharacteristicUuid: "6e400003-b5a3-f393-e0a9-e50e24dcca9e",
+        deviceNamePrefix: ""
+    };
+
+    let device = null;
+    let server = null;
+    let characteristic = null;
+    let onSample = null;
+    let textBuffer = "";
+    const decoder = new TextDecoder();
+
+    function config() {
+        return { ...DEFAULTS, ...(window.TELEOP_GYRO_BLE || {}) };
+    }
+
+    function parseLine(line) {
+        const text = line.trim();
+        if (!text) return null;
+        try {
+            const data = JSON.parse(text);
+            const gx = Number(data.gx ?? data.gyroscope_x);
+            const gy = Number(data.gy ?? data.gyroscope_y);
+            if (Number.isFinite(gx) && Number.isFinite(gy)) return { gx, gy };
+        } catch (_) {
+            // Accept simple CSV as an alternative to JSON.
+        }
+        const parts = text.split(/[;,\s]+/).filter(Boolean);
+        if (parts.length >= 2) {
+            const gx = Number(parts[0]);
+            const gy = Number(parts[1]);
+            if (Number.isFinite(gx) && Number.isFinite(gy)) return { gx, gy };
+        }
+        console.warn("[GYRO] Ignoring unrecognized BLE data:", text);
+        return null;
+    }
+
+    function handleNotification(event) {
+        const bytes = event.target.value;
+        const chunk = decoder.decode(bytes);
+        textBuffer += chunk;
+        if (textBuffer.length > 2048) textBuffer = textBuffer.slice(-2048);
+        const lines = textBuffer.split(/\r?\n/);
+        textBuffer = lines.pop() || "";
+        for (const line of lines) {
+            const sample = parseLine(line);
+            if (sample && typeof onSample === "function") onSample(sample);
+        }
+        // Also accept one complete JSON/CSV packet without a newline.
+        if (!textBuffer.includes("{") && /[,;]/.test(textBuffer)) {
+            const sample = parseLine(textBuffer);
+            if (sample && typeof onSample === "function") onSample(sample);
+            textBuffer = "";
+        }
+    }
+
+    async function connect(callback) {
+        if (!navigator.bluetooth) {
+            throw new Error("Web Bluetooth is unavailable. Use Chrome on Android over HTTPS, or localhost on a supported desktop browser.");
+        }
+        if (typeof callback !== "function") throw new Error("A gyroscope data callback is required.");
+        const cfg = config();
+        onSample = callback;
+        device = await navigator.bluetooth.requestDevice({
+            acceptAllDevices: true,
+            optionalServices: [cfg.serviceUuid]
+        });
+        device.addEventListener("gattserverdisconnected", onDisconnected);
+        server = await device.gatt.connect();
+        const service = await server.getPrimaryService(cfg.serviceUuid);
+        characteristic = await service.getCharacteristic(cfg.notifyCharacteristicUuid);
+        characteristic.addEventListener("characteristicvaluechanged", handleNotification);
+        await characteristic.startNotifications();
+        textBuffer = "";
+        console.info("[GYRO] Bluetooth connected:", device.name || "BLE device");
+        return { name: device.name || "BLE device" };
+    }
+
+    function onDisconnected() {
+        console.warn("[GYRO] BLE device disconnected");
+        characteristic = null;
+        server = null;
+        device = null;
+    }
+
+    async function disconnect() {
+        if (characteristic) {
+            characteristic.removeEventListener("characteristicvaluechanged", handleNotification);
+            try { await characteristic.stopNotifications(); } catch (_) {}
+        }
+        if (device?.gatt?.connected) device.gatt.disconnect();
+        characteristic = null;
+        server = null;
+        device = null;
+        onSample = null;
+        textBuffer = "";
+    }
+
+    window.GyroscopeInput = { connect, disconnect };
+})();
+
+
+/* Phone browser head-orientation input for Mobile / VR Scene.
+ * Uses DeviceOrientationEvent (relative yaw/pitch angles), not BLE.
+ * The page must be opened on the phone over HTTPS (or localhost).
+ */
+(function () {
+  "use strict";
+  let listening = false;
+  let baseline = null;
+  let latest = { alpha: 0, beta: 0 };
+  let enabled = false;
+
+  const $ = (id) => document.getElementById(id);
+  const wrapAngle = (angle) => ((angle + 180) % 360 + 360) % 360 - 180;
+
+  function renderStatus(text, active = false) {
+    const el = $("mobileGyroStatus");
+    if (el) { el.textContent = text; el.classList.toggle("active", active); }
+  }
+
+  function onOrientation(event) {
+    if (event.alpha == null || event.beta == null) {
+      renderStatus("NO SENSOR DATA");
+      return;
+    }
+    latest = { alpha: Number(event.alpha), beta: Number(event.beta) };
+    if (!baseline) baseline = { ...latest };
+    const yaw = wrapAngle(latest.alpha - baseline.alpha);
+    const pitch = wrapAngle(latest.beta - baseline.beta);
+    window.TeleopMobileBridge?.setOrientation?.({ gx: yaw, gy: pitch });
+    if (!enabled) return;
+    renderStatus("HEAD TRACKING ACTIVE", true);
+  }
+
+  async function start() {
+    if (!window.isSecureContext) {
+      alert("Phone sensors require HTTPS. Open the website using its HTTPS tunnel address.");
+      return;
+    }
+    if (!window.DeviceOrientationEvent) {
+      alert("This browser does not expose device orientation sensors.");
+      return;
+    }
+    try {
+      if (typeof DeviceOrientationEvent.requestPermission === "function") {
+        const permission = await DeviceOrientationEvent.requestPermission();
+        if (permission !== "granted") throw new Error("Motion sensor permission was not granted.");
+      }
+      if (!listening) {
+        window.addEventListener("deviceorientation", onOrientation, true);
+        listening = true;
+      }
+      baseline = null;
+      enabled = true;
+      window.TeleopMobileBridge?.setActive?.(true);
+      $("enableMobileGyroButton").disabled = true;
+      $("calibrateMobileGyroButton").disabled = false;
+      $("stopMobileGyroButton").disabled = false;
+      renderStatus("WAITING FOR SENSOR", true);
+    } catch (error) {
+      console.error("[MOBILE GYRO] Start failed:", error);
+      alert("Could not enable phone orientation: " + (error.message || error));
+    }
+  }
+
+  function calibrate() {
+    if (latest.alpha == null || latest.beta == null) return;
+    baseline = { ...latest };
+    window.TeleopMobileBridge?.setOrientation?.({ gx: 0, gy: 0 });
+    renderStatus("NEUTRAL POSITION SET", true);
+  }
+
+  function stop() {
+    enabled = false;
+    if (listening) { window.removeEventListener("deviceorientation", onOrientation, true); listening = false; }
+    window.TeleopMobileBridge?.setActive?.(false);
+    if ($("enableMobileGyroButton")) $("enableMobileGyroButton").disabled = false;
+    if ($("calibrateMobileGyroButton")) $("calibrateMobileGyroButton").disabled = true;
+    if ($("stopMobileGyroButton")) $("stopMobileGyroButton").disabled = true;
+    renderStatus("SENSOR OFF");
+  }
+
+  function init() {
+    $("enableMobileGyroButton")?.addEventListener("click", start);
+    $("calibrateMobileGyroButton")?.addEventListener("click", calibrate);
+    $("stopMobileGyroButton")?.addEventListener("click", stop);
+  }
+
+  window.MobileHeadScene = { init, start, stop, calibrate };
+})();
+
+
 // ============================================================
 // OPERATOR FRONT END: HUMAN ARM TRACKING + ESP32 IMU
 // -> ROBOT SIMULATION
 //
 // Network streams:
 // 1. joint-control DataChannel: calculated arm joint targets
-// 2. imu-control DataChannel: ESP32 head orientation
+// 2. imu-control DataChannel: phone head orientation
 // 3. robot-camera WebRTC video track: simulation -> browser
 //
 // Human webcam processing happens locally in the browser.
@@ -41,12 +248,8 @@ let handsModel = null;
 let poseBusy = false;
 let handsBusy = false;
 
-let imuPort = null;
-let imuReader = null;
-let imuReadActive = false;
-let imuBuffer = "";
-
-let latestImu = { yaw: 0, pitch: 0, roll: 0 };
+let latestImu = { gx: 0, gy: 0 }; // gx = relative yaw degrees; gy = relative pitch degrees
+let mobileGyroActive = false;
 let imuSequence = 0;
 let jointSequence = 0;
 let lastJointSend = 0;
@@ -447,6 +650,9 @@ function createPeerConnection() {
             new MediaStream([event.track]);
 
         remoteVideo.srcObject = stream;
+        const mobileVideo = $("mobileRemoteVideo");
+        if (mobileVideo) mobileVideo.srcObject = stream;
+        $("mobileVideoPlaceholder")?.classList.add("hidden");
 
         try {
             await remoteVideo.play();
@@ -667,6 +873,39 @@ function ensureOperatorPanel() {
             </p>
         </div>
 
+        <div class="scene-mode-bar" role="group" aria-label="Teleoperation scene mode">
+            <span class="scene-mode-label">VIEW MODE</span>
+            <button id="laptopSceneButton" type="button" class="scene-mode-button active">Laptop Scene</button>
+            <button id="mobileSceneButton" type="button" class="scene-mode-button">Mobile / VR Scene</button>
+        </div>
+
+        <section id="mobileScenePanel" class="mobile-scene-panel hidden">
+            <div class="mobile-scene-topline">
+                <div>
+                    <p class="eyebrow">HEAD-MOUNTED DISPLAY MODE</p>
+                    <h3>Robot Camera View</h3>
+                    <p class="mobile-scene-help">Mount your phone securely in the goggles, enter Mobile / VR Scene, then enable head tracking.</p>
+                </div>
+                <span id="mobileGyroStatus" class="mobile-gyro-status">SENSOR OFF</span>
+            </div>
+            <div id="mobileVideoMount" class="mobile-video-mount">
+                <video id="mobileRemoteVideo" autoplay muted playsinline></video>
+                <div id="mobileVideoPlaceholder" class="mobile-video-placeholder">Waiting for robot simulation video…</div>
+                <div class="vr-reticle" aria-hidden="true">+</div>
+            </div>
+            <div class="mobile-gyro-controls">
+                <button id="enableMobileGyroButton" type="button" class="scene-action-primary">Enable Head Tracking</button>
+                <button id="calibrateMobileGyroButton" type="button" disabled>Calibrate Neutral Position</button>
+                <button id="stopMobileGyroButton" type="button" disabled>Stop Tracking</button>
+            </div>
+            <div class="mobile-gyro-values">
+                <div><span>GX · Yaw</span><strong id="mobileGxValue">0.0°</strong></div>
+                <div><span>GY · Pitch</span><strong id="mobileGyValue">0.0°</strong></div>
+            </div>
+            <p class="teleop-note">Phone orientation is measured relative to the calibrated neutral position. Only yaw and pitch are sent to the robot over the existing WebRTC imu-control channel. This mode uses the phone's browser sensors, not Bluetooth or Dabble.</p>
+        </section>
+
+        <div id="laptopSceneContent">
         <div class="teleop-grid">
 
             <section class="teleop-card">
@@ -748,50 +987,33 @@ function ensureOperatorPanel() {
 
                 <div class="teleop-actions">
                     <button id="connectImuButton" type="button">
-                        Connect ESP32
+                        Connect External IMU (BLE)
                     </button>
                     <button id="disconnectImuButton" type="button" disabled>
-                        Disconnect ESP32
+                        Disconnect IMU
                     </button>
                 </div>
 
-                <div class="orientation-values">
+                <div class="orientation-values orientation-two-axis">
                     <div>
-                        <span>Yaw</span>
-                        <strong id="imuYaw">0.000 rad</strong>
+                        <span>GX · X rotation rate</span>
+                        <strong id="imuGx">0.00 °/s</strong>
                     </div>
                     <div>
-                        <span>Pitch</span>
-                        <strong id="imuPitch">0.000 rad</strong>
-                    </div>
-                    <div>
-                        <span>Roll</span>
-                        <strong id="imuRoll">0.000 rad</strong>
-                    </div>
-                </div>
-
-                <div class="orientation-values">
-                    <div>
-                        <span>Camera yaw target</span>
-                        <strong id="cameraYawTarget">0.0°</strong>
-                    </div>
-                    <div>
-                        <span>Camera pitch target</span>
-                        <strong id="cameraPitchTarget">0.0°</strong>
-                    </div>
-                    <div>
-                        <span>Camera roll target</span>
-                        <strong id="cameraRollTarget">0.0°</strong>
+                        <span>GY · Y rotation rate</span>
+                        <strong id="imuGy">0.00 °/s</strong>
                     </div>
                 </div>
 
                 <p class="teleop-note">
-                    Orientation values are received from the ESP32.
-                    Camera movement depends on the simulation's configured axes.
+                    Only gx and gy are displayed and sent over the WebRTC imu-control channel.
+                    External BLE input only. For VR head tracking, use Mobile / VR Scene.
                 </p>
             </section>
 
         </div>
+
+        </div><!-- /laptopSceneContent -->
 
         <div class="teleop-footer">
             <span>Control transmission:</span>
@@ -882,8 +1104,58 @@ function ensureOperatorPanel() {
     );
 
     initializeJointTargetDisplay();
+    setupSceneModeButtons();
+    window.MobileHeadScene?.init?.();
     updateControlButtonState();
 }
+
+// -----------------------------
+// Laptop / mobile scene switching
+// -----------------------------
+function setupSceneModeButtons() {
+    const laptopButton = $("laptopSceneButton");
+    const mobileButton = $("mobileSceneButton");
+    const laptopContent = $("laptopSceneContent");
+    const mobilePanel = $("mobileScenePanel");
+    if (!laptopButton || !mobileButton || !laptopContent || !mobilePanel) return;
+
+    const setMode = (mode) => {
+        const isMobile = mode === "mobile";
+        laptopContent.classList.toggle("hidden", isMobile);
+        mobilePanel.classList.toggle("hidden", !isMobile);
+        laptopButton.classList.toggle("active", !isMobile);
+        mobileButton.classList.toggle("active", isMobile);
+        if (isMobile) {
+            // Don't request sensors automatically; the user must press Enable.
+            const video = $("mobileRemoteVideo");
+            if (video && remoteVideo?.srcObject && !video.srcObject) video.srcObject = remoteVideo.srcObject;
+        } else {
+            window.MobileHeadScene?.stop?.();
+        }
+    };
+    laptopButton.addEventListener("click", () => setMode("laptop"));
+    mobileButton.addEventListener("click", () => setMode("mobile"));
+}
+
+// Bridge used by mobile-scene.js; keeps the IMU DataChannel in this main file.
+window.TeleopMobileBridge = {
+    setOrientation({ gx, gy }) {
+        if (!Number.isFinite(gx) || !Number.isFinite(gy)) return;
+        latestImu = { gx, gy };
+        lastImuSend = Date.now();
+        setStatus("imuGx", `${gx.toFixed(1)} °`);
+        setStatus("imuGy", `${gy.toFixed(1)} °`);
+        setStatus("mobileGxValue", `${gx.toFixed(1)}°`);
+        setStatus("mobileGyValue", `${gy.toFixed(1)}°`);
+        setStatus("imuChannelStatus", channelIsOpen(imuChannel) ? "PHONE ORIENTATION ACTIVE" : "WAITING FOR WEBRTC IMU CHANNEL");
+    },
+    setActive(active) {
+        mobileGyroActive = Boolean(active);
+        if (mobileGyroActive) maybeStartControlTransmission();
+        else if (!trackingActive) stopControlTransmission();
+        updateControlButtonState();
+    }
+};
 
 // -----------------------------
 // Basic styles for the dashboard
@@ -1032,6 +1304,8 @@ function addTeleopStyles() {
             margin-top: 14px;
         }
 
+        .orientation-two-axis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
         .orientation-values div {
             padding: 10px 6px;
             border-radius: 8px;
@@ -1169,6 +1443,7 @@ function handleRobotData(rawData, channelType) {
         renderJointFeedback(data);
     } else if (
         data.type === "head_orientation_feedback" ||
+        data.type === "head_gyro_feedback" ||
         data.type === "imu_feedback"
     ) {
         renderImuFeedback(data);
@@ -1186,29 +1461,9 @@ function renderJointFeedback(data) {
 }
 
 function renderImuFeedback(data) {
-    const orientation =
-        data.orientation || data;
-
-    if (Number.isFinite(Number(orientation.yaw))) {
-        setStatus(
-            "cameraYawTarget",
-            `${(Number(orientation.yaw) * 180 / Math.PI).toFixed(1)}°`
-        );
-    }
-
-    if (Number.isFinite(Number(orientation.pitch))) {
-        setStatus(
-            "cameraPitchTarget",
-            `${(Number(orientation.pitch) * 180 / Math.PI).toFixed(1)}°`
-        );
-    }
-
-    if (Number.isFinite(Number(orientation.roll))) {
-        setStatus(
-            "cameraRollTarget",
-            `${(Number(orientation.roll) * 180 / Math.PI).toFixed(1)}°`
-        );
-    }
+    const gyro = data.gyro || data;
+    if (Number.isFinite(Number(gyro.gx))) setStatus("imuGx", `${Number(gyro.gx).toFixed(2)} °/s`);
+    if (Number.isFinite(Number(gyro.gy))) setStatus("imuGy", `${Number(gyro.gy).toFixed(2)} °/s`);
 }// ============================================================
 // PART 3: LOCAL WEBCAM + MEDIAPIPE TRACKING + JOINT MAPPING
 // ============================================================
@@ -2139,192 +2394,56 @@ function stopHandTracking() {
 
     console.log("[TRACKING] Local tracking stopped");
 }// ============================================================
-// PART 4: ESP32 IMU + DATA CHANNEL TRANSMISSION + CLEANUP
+// PART 4: GYROSCOPE MODULE + DATA CHANNEL TRANSMISSION
+// Bluetooth input is isolated in client/gyroscope.js.
 // ============================================================
-
-// -----------------------------
-// IMU serial configuration
-// -----------------------------
-const IMU_CONFIG = {
-    baudRate: 115200,
-    maxLineLength: 2048,
-    maxAngleRadians: Math.PI * 4,
-    reconnectNotRequired: true
-};
 
 let jointTransmitTimer = null;
 let imuTransmitTimer = null;
 let transmissionEnabled = false;
 let staleWarningShown = false;
 
-// -----------------------------
-// Connect ESP32 using Web Serial
-// -----------------------------
 async function connectEsp32Imu() {
-    if (!("serial" in navigator)) {
-        alert(
-            "Web Serial is unavailable in this browser. " +
-            "Use a supported Chromium browser over HTTPS or localhost."
-        );
+    if (!window.GyroscopeInput) {
+        alert("gyroscope.js is not loaded. Add it before app.js in index.html.");
         return;
     }
 
     try {
-        imuPort = await navigator.serial.requestPort();
+        await window.GyroscopeInput.connect((sample) => {
+            const gx = Number(sample.gx);
+            const gy = Number(sample.gy);
+            if (!Number.isFinite(gx) || !Number.isFinite(gy)) return;
 
-        await imuPort.open({
-            baudRate: IMU_CONFIG.baudRate
+            latestImu = { gx, gy };
+            lastImuSend = Date.now();
+            setStatus("imuGx", `${gx.toFixed(2)} °/s`);
+            setStatus("imuGy", `${gy.toFixed(2)} °/s`);
+            setStatus("imuChannelStatus", "BLUETOOTH IMU CONNECTED");
         });
-
-        imuReadActive = true;
-        imuBuffer = "";
 
         $("connectImuButton").disabled = true;
         $("disconnectImuButton").disabled = false;
-
-        setStatus("imuChannelStatus", "ESP32 CONNECTED");
-        console.log("[IMU] Serial port opened");
-
-        readEsp32Serial();
-
     } catch (error) {
-        console.error("[IMU] Could not connect:", error);
-
-        setStatus("imuChannelStatus", "SERIAL ERROR");
-
-        alert(
-            "Could not connect to the ESP32: " +
-            (error.message || error)
-        );
-
-        await disconnectEsp32Imu();
+        console.error("[IMU] Bluetooth connection failed:", error);
+        setStatus("imuChannelStatus", "BLUETOOTH ERROR");
+        alert(`Could not connect to the IMU: ${error.message || error}`);
     }
 }
 
-// -----------------------------
-// Read serial bytes and split
-// newline-delimited JSON messages.
-// -----------------------------
-async function readEsp32Serial() {
-    if (!imuPort?.readable) return;
-
-    let reader = null;
-
+async function disconnectEsp32Imu() {
     try {
-        reader = imuPort.readable.getReader();
-        imuReader = reader;
-
-        const decoder = new TextDecoder();
-
-        while (imuReadActive) {
-            const { value, done } = await reader.read();
-
-            if (done) break;
-            if (!value) continue;
-
-            imuBuffer += decoder.decode(value, {
-                stream: true
-            });
-
-            if (imuBuffer.length > IMU_CONFIG.maxLineLength) {
-                console.warn("[IMU] Oversized serial line discarded");
-                imuBuffer = "";
-                continue;
-            }
-
-            let newlineIndex;
-
-            while (
-                (newlineIndex = imuBuffer.indexOf("\n")) >= 0
-            ) {
-                const line = imuBuffer
-                    .slice(0, newlineIndex)
-                    .trim();
-
-                imuBuffer = imuBuffer.slice(newlineIndex + 1);
-
-                if (line) {
-                    processImuLine(line);
-                }
-            }
-        }
-
+        await window.GyroscopeInput?.disconnect();
     } catch (error) {
-        if (imuReadActive) {
-            console.error("[IMU] Serial read error:", error);
-            setStatus("imuChannelStatus", "READ ERROR");
-        }
-
-    } finally {
-        if (reader) {
-            try {
-                reader.releaseLock();
-            } catch (_) {
-                // Reader may already have been released.
-            }
-        }
-
-        if (imuReader === reader) {
-            imuReader = null;
-        }
+        console.warn("[IMU] Disconnect issue:", error);
     }
+    lastImuSend = 0;
+    if ($("connectImuButton")) $("connectImuButton").disabled = false;
+    if ($("disconnectImuButton")) $("disconnectImuButton").disabled = true;
+    setStatus("imuChannelStatus", "DISCONNECTED");
+    stopControlTransmission();
 }
 
-// -----------------------------
-// Parse one ESP32 JSON line.
-// -----------------------------
-function processImuLine(line) {
-    let message;
-
-    try {
-        message = JSON.parse(line);
-    } catch {
-        console.warn("[IMU] Invalid JSON line:", line);
-        return;
-    }
-
-    if (
-        message.type &&
-        message.type !== "imu_orientation"
-    ) {
-        return;
-    }
-
-    const yaw = Number(message.yaw);
-    const pitch = Number(message.pitch);
-    const roll = Number(message.roll);
-
-    if (
-        !Number.isFinite(yaw) ||
-        !Number.isFinite(pitch) ||
-        !Number.isFinite(roll)
-    ) {
-        console.warn("[IMU] Missing or invalid orientation values");
-        return;
-    }
-
-    const limit = IMU_CONFIG.maxAngleRadians;
-
-    if (
-        Math.abs(yaw) > limit ||
-        Math.abs(pitch) > limit ||
-        Math.abs(roll) > limit
-    ) {
-        console.warn("[IMU] Orientation outside accepted range");
-        return;
-    }
-
-    latestImu = { yaw, pitch, roll };
-    lastImuSend = Date.now();
-
-    setStatus("imuYaw", `${yaw.toFixed(3)} rad`);
-    setStatus("imuPitch", `${pitch.toFixed(3)} rad`);
-    setStatus("imuRoll", `${roll.toFixed(3)} rad`);
-
-    setStatus("imuChannelStatus", "IMU DATA RECEIVED");
-}
-
-// -----------------------------
 // Begin periodic transmission.
 // -----------------------------
 function startControlTransmission() {
@@ -2468,40 +2587,33 @@ function sendJointTargets() {
 // Angles are in radians.
 // -----------------------------
 function sendImuCommand() {
-    if (!transmissionEnabled) return;
-
-    if (!channelIsOpen(imuChannel)) {
-        return;
-    }
+    if (!transmissionEnabled || !channelIsOpen(imuChannel)) return;
 
     const now = Date.now();
-
-    // Avoid repeatedly sending old IMU data as if it were new.
-    if (
-        !lastImuSend ||
-        now - lastImuSend > 500
-    ) {
+    if (!lastImuSend || now - lastImuSend > 500) {
         setStatus("imuChannelStatus", "WAITING FOR FRESH IMU");
         return;
     }
 
+    // Phone browser reports orientation angles, not raw angular velocity.
+    // Send calibrated relative yaw/pitch in radians for the simulation.
     const packet = {
         type: "head_orientation",
         sequence: ++imuSequence,
         timestamp_ms: now,
         units: "rad",
         orientation: {
-            yaw: latestImu.yaw,
-            pitch: latestImu.pitch,
-            roll: latestImu.roll
-        }
+            yaw: latestImu.gx * Math.PI / 180,
+            pitch: latestImu.gy * Math.PI / 180,
+            roll: 0
+        },
+        source: "phone_device_orientation"
     };
 
     try {
         imuChannel.send(JSON.stringify(packet));
-
     } catch (error) {
-        console.error("[CONTROL] IMU send failed:", error);
+        console.error("[CONTROL] Gyroscope send failed:", error);
     }
 }
 
@@ -2516,60 +2628,12 @@ function maybeStartControlTransmission() {
 
     if (
         channelsReady &&
-        trackingActive
+        (trackingActive || mobileGyroActive)
     ) {
         startControlTransmission();
     } else {
         updateControlButtonState();
     }
-}
-
-// -----------------------------
-// Disconnect ESP32 serial input.
-// -----------------------------
-async function disconnectEsp32Imu() {
-    imuReadActive = false;
-
-    if (imuReader) {
-        try {
-            await imuReader.cancel();
-        } catch (error) {
-            console.warn("[IMU] Reader cancellation:", error);
-        }
-    }
-
-    if (imuPort) {
-        try {
-            if (imuPort.readable) {
-                // readEsp32Serial releases its reader lock.
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
-
-            await imuPort.close();
-
-        } catch (error) {
-            console.warn("[IMU] Port close:", error);
-        }
-    }
-
-    imuReader = null;
-    imuPort = null;
-    imuBuffer = "";
-    lastImuSend = 0;
-
-    if ($("connectImuButton")) {
-        $("connectImuButton").disabled = false;
-    }
-
-    if ($("disconnectImuButton")) {
-        $("disconnectImuButton").disabled = true;
-    }
-
-    setStatus("imuChannelStatus", "DISCONNECTED");
-
-    stopControlTransmission();
-
-    console.log("[IMU] ESP32 disconnected");
 }
 
 // -----------------------------
@@ -2630,7 +2694,7 @@ function updateControlButtonState() {
             !trackingActive;
     }
 
-    if (channelsReady && trackingActive) {
+    if (channelsReady && (trackingActive || mobileGyroActive)) {
         maybeStartControlTransmission();
     } else {
         setStatus(
