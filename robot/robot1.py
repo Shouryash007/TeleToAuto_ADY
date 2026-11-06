@@ -26,7 +26,7 @@ from aiortc import (
 
 ROBOT_ID = os.getenv("ROBOT_ID", "robot_001")
 ROBOT_TOKEN = os.getenv("ROBOT_TOKEN", "robot001secretabc")
-SIGNALING_SERVER = os.getenv("SIGNALING_SERVER", "ws://127.0.0.1:5000/ws")
+SIGNALING_SERVER = os.getenv("SIGNALING_SERVER", "ws://127.0.0.1:8000/ws")
 # Physical camera transmission is disabled by default.
 # Gazebo camera integration will supply the simulated video separately.
 CAMERA_DEVICE = os.getenv("CAMERA_DEVICE", "")
