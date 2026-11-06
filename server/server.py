@@ -141,6 +141,33 @@ async def style_css():
         CLIENT_DIR / "style.css"
     )
 
+# JavaScript feature modules imported by app.js (ES modules).
+# Each module must be served from the same / URL namespace because the
+# imports in app.js are relative paths such as ./ui-controller.js.
+@app.get("/ui-controller.js")
+async def ui_controller_js():
+    return FileResponse(CLIENT_DIR / "ui-controller.js", media_type="application/javascript")
+
+
+@app.get("/robot-connection.js")
+async def robot_connection_js():
+    return FileResponse(CLIENT_DIR / "robot-connection.js", media_type="application/javascript")
+
+
+@app.get("/hand-tracker.js")
+async def hand_tracker_js():
+    return FileResponse(CLIENT_DIR / "hand-tracker.js", media_type="application/javascript")
+
+
+@app.get("/manipulator-controller.js")
+async def manipulator_controller_js():
+    return FileResponse(CLIENT_DIR / "manipulator-controller.js", media_type="application/javascript")
+
+
+@app.get("/digital-twin.js")
+async def digital_twin_js():
+    return FileResponse(CLIENT_DIR / "digital-twin.js", media_type="application/javascript")
+
 
 @app.get("/mobile")
 async def mobile_gyro_page():

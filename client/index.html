@@ -8,7 +8,7 @@
     <title>Remote Robot Portal</title>
 
     <link rel="stylesheet" href="/style.css">
-
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <!-- MediaPipe is loaded by app.js when tracking starts. -->
 </head>
 
@@ -159,6 +159,16 @@
     </section>
 
     <!-- Load the operator-side application. -->
-    <script src="/app.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+                "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+                "urdf-loader": "https://cdn.jsdelivr.net/npm/urdf-loader@0.12.4/src/URDFLoader.js"
+            }
+        }
+        </script>
+    <script type="module" src="/app.js"></script>
 </body>
 </html>

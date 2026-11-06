@@ -293,7 +293,8 @@ export function createRobotConnection(handlers = {}) {
 
             } else if (
                 data.type === "joint_feedback" ||
-                data.type === "imu_feedback"
+                data.type === "imu_feedback" ||
+                data.type === "mobile_imu_readout"
             ) {
                 notify("onRobotMessage", data, "signaling");
             }
