@@ -141,7 +141,8 @@ def open_camera_optional():
 
 
 
-_latest_frame = {"jpeg": None, "updated": 0.0}
+# Shared latest decoded frame: decode each Gazebo JPEG once, not once per viewer.
+_latest_frame = {"bgr": None, "updated": 0.0}
 _frame_lock = threading.Lock()
 
 def _recv_exact(conn, size):
@@ -171,9 +172,14 @@ def _frame_receiver():
                     if length < 1 or length > 4_000_000: break
                     jpeg = _recv_exact(conn, length)
                     if not jpeg: break
-                    with _frame_lock:
-                        _latest_frame["jpeg"] = jpeg
-                        _latest_frame["updated"] = time.monotonic()
+                    import numpy as np
+                    decoded = cv2.imdecode(
+                        np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR
+                    )
+                    if decoded is not None:
+                        with _frame_lock:
+                            _latest_frame["bgr"] = decoded
+                            _latest_frame["updated"] = time.monotonic()
         except Exception as exc:
             print("[GAZEBO VIDEO] Receiver error:", repr(exc))
         print("[GAZEBO VIDEO] Bridge disconnected")
@@ -189,11 +195,10 @@ class GazeboCameraVideoTrack(VideoStreamTrack):
         import numpy as np
         pts, time_base = await self.next_timestamp()
         with _frame_lock:
-            jpeg, updated = _latest_frame["jpeg"], _latest_frame["updated"]
-        frame = None
-        if jpeg and time.monotonic() - updated < 2.0:
-            frame = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
-        if frame is None:
+            frame = _latest_frame["bgr"]
+            updated = _latest_frame["updated"]
+        # Keep only the newest frame; never build a queue of stale camera images.
+        if frame is None or time.monotonic() - updated >= 2.0:
             frame = np.zeros((CAMERA_HEIGHT, CAMERA_WIDTH, 3), dtype=np.uint8)
             if time.monotonic() - self.last_notice > 5:
                 print("[GAZEBO VIDEO] Waiting for first Gazebo image frame")

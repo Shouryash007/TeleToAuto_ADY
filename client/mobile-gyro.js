@@ -5,8 +5,60 @@
   let token = null, socket = null, listening = false, active = false, sequence = 0;
   let peerConnection = null;
   const cameraVideo = $("robotCameraVideo");
+  const cameraVideoRight = $("robotCameraVideoRight");
   const cameraPlaceholder = $("robotCameraPlaceholder");
   const cameraStatus = $("robotCameraStatus");
+  const cameraVideoWrap = $("cameraVideoWrap");
+  const cameraMenu = $("cameraVideoMenu");
+  const cameraMenuButton = $("cameraMenuButton");
+  const cameraFullscreenButton = $("cameraFullscreenButton");
+
+  function setVrMode(enabled) {
+    cameraVideoWrap?.classList.toggle("vr-mode", enabled);
+    cameraMenu?.classList.add("hidden");
+    cameraMenuButton?.setAttribute("aria-expanded", "false");
+    $("normalVideoButton")?.setAttribute("aria-pressed", String(!enabled));
+    $("vrVideoButton")?.setAttribute("aria-pressed", String(enabled));
+  }
+
+  async function toggleVideoFullscreen() {
+    try {
+      if (!document.fullscreenElement) {
+        if (cameraVideoWrap?.requestFullscreen) await cameraVideoWrap.requestFullscreen();
+        else if (cameraVideoWrap?.webkitRequestFullscreen) cameraVideoWrap.webkitRequestFullscreen();
+      } else if (document.exitFullscreen) {
+        await document.exitFullscreen();
+      }
+    } catch (error) {
+      console.warn("[MOBILE VIDEO] Fullscreen unavailable:", error);
+      if (cameraStatus) cameraStatus.textContent = "FULLSCREEN NOT AVAILABLE";
+    }
+  }
+
+  function updateFullscreenButton() {
+    const fullscreen = document.fullscreenElement === cameraVideoWrap;
+    if (cameraFullscreenButton) {
+      cameraFullscreenButton.textContent = fullscreen ? "×" : "⛶";
+      cameraFullscreenButton.setAttribute("aria-label", fullscreen ? "Exit full screen" : "Enter full screen");
+    }
+  }
+
+  cameraMenuButton?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const opening = cameraMenu.classList.contains("hidden");
+    cameraMenu.classList.toggle("hidden", !opening);
+    cameraMenuButton.setAttribute("aria-expanded", String(opening));
+  });
+  $("normalVideoButton")?.addEventListener("click", () => setVrMode(false));
+  $("vrVideoButton")?.addEventListener("click", () => setVrMode(true));
+  cameraFullscreenButton?.addEventListener("click", toggleVideoFullscreen);
+  document.addEventListener("fullscreenchange", updateFullscreenButton);
+  document.addEventListener("click", (event) => {
+    if (!cameraVideoWrap?.contains(event.target)) {
+      cameraMenu?.classList.add("hidden");
+      cameraMenuButton?.setAttribute("aria-expanded", "false");
+    }
+  });
   // The existing mobile HTML uses gx/gy value IDs; the second channel is Roll.
   document.querySelectorAll(".reading span").forEach((el) => {
     if (/GY|Pitch/i.test(el.textContent)) el.textContent = "GY · Roll";
@@ -76,6 +128,7 @@
   function closeVideoPeer() {
     if (peerConnection) { try { peerConnection.close(); } catch {} peerConnection = null; }
     if (cameraVideo) cameraVideo.srcObject = null;
+    if (cameraVideoRight) cameraVideoRight.srcObject = null;
     cameraPlaceholder?.classList.remove("hidden");
     if (cameraStatus) { cameraStatus.textContent = "VIDEO DISCONNECTED"; cameraStatus.classList.remove("live"); }
   }
@@ -105,9 +158,12 @@
     const pc = new RTCPeerConnection({ iceServers });
     peerConnection = pc;
     pc.ontrack = async (event) => {
-      cameraVideo.srcObject = event.streams?.[0] || new MediaStream([event.track]);
+      const stream = event.streams?.[0] || new MediaStream([event.track]);
+      cameraVideo.srcObject = stream;
+      // Both VR panes display the same mono camera stream (not stereoscopic video).
+      cameraVideoRight.srcObject = stream;
       try {
-        await cameraVideo.play();
+        await Promise.all([cameraVideo.play(), cameraVideoRight.play()]);
         cameraPlaceholder?.classList.add("hidden");
         cameraStatus.textContent = "LIVE · WEBRTC";
         cameraStatus.classList.add("live");
@@ -282,8 +338,8 @@
     smoothedYaw += (limitedYaw - smoothedYaw) * FILTER_ALPHA;
     smoothedRoll += (limitedRoll - smoothedRoll) * FILTER_ALPHA;
 
-    const yaw = Math.abs(smoothedYaw) < DEADBAND_DEG ? 0 : smoothedYaw;
-    const roll = Math.abs(smoothedRoll) < DEADBAND_DEG ? 0 : smoothedRoll;
+    const yaw = Math.abs(smoothedYaw) < DEADBAND_DEG ? 0 : -smoothedYaw;
+    const roll = Math.abs(smoothedRoll) < DEADBAND_DEG ? 0 : -smoothedRoll;
     $("gx").textContent = `${yaw.toFixed(1)}°`;
     $("gy").textContent = `${roll.toFixed(1)}°`;
 

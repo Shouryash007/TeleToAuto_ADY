@@ -28,11 +28,28 @@
     .reading strong { display: block; margin-top: 8px; font-size: 1.5rem; font-variant-numeric: tabular-nums; }
     .hidden { display: none !important; }
     .hint { font-size: .88rem; }
-    .video-wrap { position:relative; width:100%; aspect-ratio:4/3; background:#080c12; border-radius:12px; overflow:hidden; }
-    #robotCameraVideo { width:100%; height:100%; object-fit:contain; display:block; }
-    .video-placeholder { position:absolute; inset:0; display:grid; place-items:center; color:#aebbd0; padding:16px; text-align:center; }
+    .video-wrap { position:relative; width:100%; aspect-ratio:4/3; background:#080c12; border-radius:12px; overflow:hidden; isolation:isolate; }
+    .video-views { display:flex; width:100%; height:100%; }
+    .video-view { width:100%; height:100%; min-width:0; object-fit:contain; display:block; background:#05080d; }
+    .video-wrap.vr-mode { aspect-ratio:16/9; }
+    .video-wrap.vr-mode .video-view { width:50%; object-fit:cover; }
+    .video-view.secondary { display:none; }
+    .video-wrap.vr-mode .video-view.secondary { display:block; }
+    .video-placeholder { position:absolute; inset:0; display:grid; place-items:center; color:#aebbd0; padding:16px; text-align:center; pointer-events:none; }
+    .video-toolbar { position:absolute; z-index:5; top:10px; right:10px; display:flex; gap:8px; }
+    .video-toolbar button { width:auto; min-width:42px; margin:0; padding:9px 12px; background:rgba(12,19,30,.88); border:1px solid #63738a; }
+    .video-menu { position:absolute; z-index:6; top:58px; right:10px; width:min(230px, calc(100% - 20px)); padding:8px; border:1px solid #52627a; border-radius:12px; background:rgba(15,23,36,.97); box-shadow:0 10px 30px #0009; }
+    .video-menu button { margin:0; text-align:left; background:transparent; padding:11px; }
+    .video-menu button:hover { background:#29384d; }
     .video-status { font-size:.85rem; color:#f3c969; font-weight:700; margin-top:8px; }
     .video-status.live { color:#65e2a2; }
+    .video-wrap:fullscreen { width:100vw; height:100vh; max-width:none; aspect-ratio:auto; border-radius:0; background:#000; }
+    .video-wrap:fullscreen .video-views { width:100%; height:100%; }
+    .video-wrap:fullscreen .video-view { object-fit:contain; }
+    .video-wrap:fullscreen.vr-mode .video-view { object-fit:contain; }
+    .video-wrap:fullscreen .video-toolbar { top:max(12px, env(safe-area-inset-top)); right:max(12px, env(safe-area-inset-right)); }
+    .video-wrap:fullscreen .video-menu { top:64px; right:max(12px, env(safe-area-inset-right)); }
+    @media (max-width:560px) { body { padding:12px; } .card { padding:15px; } }
   </style>
 </head>
 <body>
@@ -59,16 +76,27 @@
 
   <section id="sensorCard" class="card hidden">
     <h2>Robot simulation camera</h2>
-    <div class="video-wrap">
-      <video id="robotCameraVideo" autoplay muted playsinline></video>
+    <div id="cameraVideoWrap" class="video-wrap">
+      <div class="video-views">
+        <video id="robotCameraVideo" class="video-view" autoplay muted playsinline></video>
+        <video id="robotCameraVideoRight" class="video-view secondary" autoplay muted playsinline aria-hidden="true"></video>
+      </div>
       <div id="robotCameraPlaceholder" class="video-placeholder">Waiting for Gazebo camera stream…</div>
+      <div class="video-toolbar">
+        <button id="cameraMenuButton" type="button" aria-label="Video options" aria-expanded="false">⋮</button>
+        <button id="cameraFullscreenButton" type="button" aria-label="Enter full screen">⛶</button>
+      </div>
+      <div id="cameraVideoMenu" class="video-menu hidden" role="menu">
+        <button id="normalVideoButton" type="button" role="menuitem">Normal video</button>
+        <button id="vrVideoButton" type="button" role="menuitem">VR headset · split view</button>
+      </div>
     </div>
     <div id="robotCameraStatus" class="video-status">VIDEO CONNECTING</div>
   </section>
 
   <section id="sensorCardControls" class="card hidden">
     <h2>Gyroscope input</h2>
-    <p class="hint">Hold the phone in your required neutral position and press Calibrate. Rotate the phone to send relative yaw and pitch values.</p>
+    <p class="hint">Hold the phone in your required neutral position and press Calibrate. Turn left/right for yaw and tilt the phone top edge up/down for roll.</p>
     <div class="readings">
       <div class="reading"><span>GX · Yaw</span><strong id="gx">0.0°</strong></div>
       <div class="reading"><span>GY · Pitch</span><strong id="gy">0.0°</strong></div>

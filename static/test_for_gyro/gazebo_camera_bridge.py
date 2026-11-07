@@ -44,8 +44,9 @@ class CameraBridge(Node):
         try:
             sock = socket.create_connection((HOST, PORT), timeout=1.0)
             # Keep the kernel send queue small; stale video is less useful than fresh video.
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 128 * 1024)
-            sock.settimeout(0.5)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 64 * 1024)
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            sock.settimeout(0.25)
             self.sock = sock
             self.get_logger().info("Connected to robot1 video receiver")
             return True
@@ -60,8 +61,10 @@ class CameraBridge(Node):
         # the next callback overwrites this frame instead of queuing old frames.
         try:
             frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+            # Moderate JPEG quality reduces transfer time while retaining a
+            # usable simulation preview. The latest-frame slot drops old frames.
             ok, encoded = cv2.imencode(
-                ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 60]
+                ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 55]
             )
             if not ok:
                 return
