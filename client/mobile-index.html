@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101722">
-  <title>Phone Gyroscope | Remote Robot</title>
+  <title>Phone Teleoperation | Remote Robot</title>
   <style>
     :root { color-scheme: dark; font-family: system-ui, -apple-system, sans-serif; }
     * { box-sizing: border-box; }
@@ -28,6 +28,11 @@
     .reading strong { display: block; margin-top: 8px; font-size: 1.5rem; font-variant-numeric: tabular-nums; }
     .hidden { display: none !important; }
     .hint { font-size: .88rem; }
+    .video-wrap { position:relative; width:100%; aspect-ratio:4/3; background:#080c12; border-radius:12px; overflow:hidden; }
+    #robotCameraVideo { width:100%; height:100%; object-fit:contain; display:block; }
+    .video-placeholder { position:absolute; inset:0; display:grid; place-items:center; color:#aebbd0; padding:16px; text-align:center; }
+    .video-status { font-size:.85rem; color:#f3c969; font-weight:700; margin-top:8px; }
+    .video-status.live { color:#65e2a2; }
   </style>
 </head>
 <body>
@@ -53,16 +58,25 @@
   </section>
 
   <section id="sensorCard" class="card hidden">
-    <h2>Gyroscope input</h2>
-    <p class="hint">Hold the phone in landscape with the screen facing you and its top edge pointing to your left. Keep it still and press Calibrate. Turn your head left/right for yaw and nod up/down for pitch.</p>
-    <div class="readings">
-      <div class="reading"><span>Head turn · Yaw</span><strong id="yaw">0.0°</strong></div>
-      <div class="reading"><span>Head nod · Pitch</span><strong id="pitch">0.0°</strong></div>
+    <h2>Robot simulation camera</h2>
+    <div class="video-wrap">
+      <video id="robotCameraVideo" autoplay muted playsinline></video>
+      <div id="robotCameraPlaceholder" class="video-placeholder">Waiting for Gazebo camera stream…</div>
     </div>
-    <button id="startButton">Enable phone gyroscope</button>
-    <button id="calibrateButton" class="secondary" disabled>Calibrate zero</button>
-    <button id="stopButton" class="stop" disabled>Stop sending</button>
-    <p class="hint">Sensor permission is requested only after pressing Enable. Keep the phone page visible while testing. Values are relative angles in degrees. Keep the phone in the calibrated landscape position.</p>
+    <div id="robotCameraStatus" class="video-status">VIDEO CONNECTING</div>
+  </section>
+
+  <section id="sensorCardControls" class="card hidden">
+    <h2>Gyroscope input</h2>
+    <p class="hint">Hold the phone in your required neutral position and press Calibrate. Rotate the phone to send relative yaw and pitch values.</p>
+    <div class="readings">
+      <div class="reading"><span>GX · Yaw</span><strong id="gx">0.0°</strong></div>
+      <div class="reading"><span>GY · Pitch</span><strong id="gy">0.0°</strong></div>
+    </div>
+    <button id="startButton">Start Sending Gyro Values</button>
+    <button id="calibrateButton" class="secondary" disabled>Calibrate</button>
+    <button id="stopButton" class="stop" disabled>Stop</button>
+    <p class="hint">Sensor permission is requested only after pressing Start Sending Gyro Values. Keep the phone page visible while testing. Values are relative angles in degrees. Keep the phone in the calibrated landscape position.</p>
     <button id="logoutButton" class="secondary">Logout</button>
   </section>
 </main>

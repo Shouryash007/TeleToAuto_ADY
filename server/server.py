@@ -51,6 +51,8 @@ robot_connections = {}
 # robot_id -> WebSocket
 browser_connections = {}
 browser_users = {}
+mobile_connections = {}
+mobile_users = {}
 
 
 # ============================================================
@@ -485,10 +487,17 @@ async def websocket_endpoint(
                 await websocket.close(code=4004)
                 return
 
+            previous_mobile = mobile_connections.get(robot_id)
+            if previous_mobile and previous_mobile is not websocket:
+                try: await previous_mobile.close(code=4002)
+                except Exception: pass
+            mobile_connections[robot_id] = websocket
+            mobile_users[robot_id] = username
             await websocket.send_text(json.dumps({
                 "type": "mobile_gyro_connected", "robot_id": robot_id, "username": username
             }))
-            print(f"[MOBILE GYRO] {username} connected to {robot_id}")
+            await robot_connections[robot_id].send_text(json.dumps({"type": "mobile_ready"}))
+            print(f"[MOBILE VIDEO] {username} connected to {robot_id}")
 
         elif role == "browser":
 
@@ -668,6 +677,12 @@ async def websocket_endpoint(
             # ------------------------------------------------
 
             if role == "mobile_gyro":
+                if message_type in ("answer", "candidate"):
+                    robot = robot_connections.get(robot_id)
+                    if robot:
+                        data["viewer"] = "mobile"
+                        await robot.send_text(json.dumps(data))
+                    continue
                 # Phone uses the same calibrated DeviceOrientation angles as the website.
                 if message_type != "head_orientation":
                     continue
@@ -717,24 +732,11 @@ async def websocket_endpoint(
                     except Exception as exc:
                         print(f"[MOBILE GYRO] Laptop readout forwarding failed: {exc}")
             elif role == "robot":
-
-                browser = (
-                    browser_connections.get(
-                        robot_id
-                    )
-                )
-
-                if browser:
-
-                    await browser.send_text(
-                        raw
-                    )
-
-                    print(
-                        f"[SIGNAL] {robot_id} "
-                        f"-> browser: "
-                        f"{message_type}"
-                    )
+                viewer = data.get("viewer", "browser")
+                target = mobile_connections.get(robot_id) if viewer == "mobile" else browser_connections.get(robot_id)
+                if target:
+                    await target.send_text(raw)
+                    print(f"[SIGNAL] {robot_id} -> {viewer}: {message_type}")
 
             # ------------------------------------------------
             # BROWSER -> ROBOT
@@ -817,6 +819,19 @@ async def websocket_endpoint(
                         pass
 
         # ====================================================
+        # MOBILE CLEANUP
+        # ====================================================
+        elif role == "mobile_gyro":
+            if robot_id and mobile_connections.get(robot_id) is websocket:
+                mobile_connections.pop(robot_id, None)
+                mobile_users.pop(robot_id, None)
+                robot = robot_connections.get(robot_id)
+                if robot:
+                    try: await robot.send_text(json.dumps({"type": "mobile_disconnected"}))
+                    except Exception: pass
+                print(f"[MOBILE VIDEO] {username} disconnected")
+
+        # ====================================================
         # BROWSER CLEANUP
         # ====================================================
 
@@ -829,6 +844,13 @@ async def websocket_endpoint(
             ):
                 del browser_connections[robot_id]
                 browser_users.pop(robot_id, None)
+                mobile = mobile_connections.pop(robot_id, None)
+                mobile_users.pop(robot_id, None)
+                if mobile:
+                    try:
+                        await mobile.send_text(json.dumps({"type": "operator_disconnected"}))
+                        await mobile.close(code=4004)
+                    except Exception: pass
 
                 print(
                     f"[USER] {username} "

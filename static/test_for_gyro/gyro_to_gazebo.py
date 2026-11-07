@@ -28,14 +28,14 @@ class GyroToGazebo(Node):
         self.port = int(self.get_parameter("udp_port").value)
         self.scale = float(self.get_parameter("gyro_scale").value)
 
-        # Revolute 18: camera yaw
+        # Revolute 18: camera yaw (phone YAW channel)
         self.yaw_pub = self.create_publisher(
             Float64MultiArray,
             "/camera_yaw_position_controller/commands",
             10
         )
 
-        # Revolute 19: camera pitch (head nod)
+        # Revolute 19: vertical tilt controller (project's phone ROLL channel)
         self.pitch_pub = self.create_publisher(
             Float64MultiArray,
             "/camera_pitch_position_controller/commands",
@@ -57,7 +57,7 @@ class GyroToGazebo(Node):
         self.sock.setblocking(False)
 
         self.yaw = 0.0
-        self.pitch = 0.0
+        self.roll = 0.0
         self.last_gyro_time = None
 
         self.timer = self.create_timer(
@@ -66,7 +66,7 @@ class GyroToGazebo(Node):
         )
 
         self.get_logger().info(
-            f"Listening for phone orientation on {self.host}:{self.port}"
+            f"Listening for phone yaw/roll orientation on {self.host}:{self.port}"
         )
 
     def publish_commands(self):
@@ -74,11 +74,11 @@ class GyroToGazebo(Node):
         yaw_msg = Float64MultiArray()
         yaw_msg.data = [self.yaw]
 
-        pitch_msg = Float64MultiArray()
-        pitch_msg.data = [self.pitch]
+        roll_msg = Float64MultiArray()
+        roll_msg.data = [self.roll]
 
         self.yaw_pub.publish(yaw_msg)
-        self.pitch_pub.publish(pitch_msg)
+        self.pitch_pub.publish(roll_msg)
 
     def receive_packets(self):
 
@@ -105,13 +105,13 @@ class GyroToGazebo(Node):
                     orientation = packet.get("orientation") or {}
 
                     yaw = float(orientation.get("yaw", 0.0))
-                    pitch = float(orientation.get("pitch", 0.0))
+                    roll = float(orientation.get("roll", 0.0))
 
-                    if not math.isfinite(yaw) or not math.isfinite(pitch):
+                    if not math.isfinite(yaw) or not math.isfinite(roll):
                         continue
 
                     self.yaw = clamp(yaw, -1.4, 1.4)
-                    self.pitch = clamp(pitch, -1.0, 1.0)
+                    self.roll = clamp(roll, -1.0, 1.0)
 
                     self.last_gyro_time = None
 
@@ -141,8 +141,8 @@ class GyroToGazebo(Node):
                         1.4
                     )
 
-                    self.pitch = clamp(
-                        self.pitch + math.radians(gy) * dt * self.scale,
+                    self.roll = clamp(
+                        self.roll + math.radians(gy) * dt * self.scale,
                         -1.0,
                         1.0
                     )
@@ -155,7 +155,7 @@ class GyroToGazebo(Node):
                 self.get_logger().info(
                     f"Phone {address[0]} | "
                     f"Yaw: {self.yaw:+.3f} rad | "
-                    f"Pitch: {self.pitch:+.3f} rad"
+                    f"Roll: {self.roll:+.3f} rad"
                 )
 
             except (

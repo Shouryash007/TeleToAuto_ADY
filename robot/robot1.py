@@ -11,6 +11,8 @@ import json
 import math
 import os
 import socket
+import struct
+import threading
 import time
 
 import cv2
@@ -33,6 +35,7 @@ CAMERA_DEVICE = os.getenv("CAMERA_DEVICE", "")
 CAMERA_WIDTH = int(os.getenv("CAMERA_WIDTH", "640"))
 CAMERA_HEIGHT = int(os.getenv("CAMERA_HEIGHT", "480"))
 CAMERA_FPS = int(os.getenv("CAMERA_FPS", "30"))
+GAZEBO_FRAME_PORT = int(os.getenv("GAZEBO_FRAME_PORT", "8767"))
 ENABLE_PHYSICAL_CAMERA = (
     os.getenv("ENABLE_PHYSICAL_CAMERA", "false").lower() == "true"
 )
@@ -49,9 +52,9 @@ MAX_ABS_JOINT_DEG = float(os.getenv("MAX_ABS_JOINT_DEG", "180"))
 
 simulation_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-ICE_SERVERS = []
-if os.getenv("STUN_URL"):
-    ICE_SERVERS.append(RTCIceServer(urls=os.getenv("STUN_URL")))
+ICE_SERVERS = [
+    RTCIceServer(urls=os.getenv("STUN_URL", "stun:stun.l.google.com:19302"))
+]
 if os.getenv("TURN_URL"):
     ICE_SERVERS.append(RTCIceServer(
         urls=os.getenv("TURN_URL"),
@@ -135,6 +138,69 @@ def open_camera_optional():
     except Exception as exc:
         print("[CAMERA] No video track; data channels can still work:", repr(exc))
         return None
+
+
+
+_latest_frame = {"jpeg": None, "updated": 0.0}
+_frame_lock = threading.Lock()
+
+def _recv_exact(conn, size):
+    data = bytearray()
+    while len(data) < size:
+        chunk = conn.recv(size - len(data))
+        if not chunk:
+            return None
+        data.extend(chunk)
+    return bytes(data)
+
+def _frame_receiver():
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind(("127.0.0.1", GAZEBO_FRAME_PORT))
+    listener.listen(1)
+    print(f"[GAZEBO VIDEO] Listening on 127.0.0.1:{GAZEBO_FRAME_PORT}")
+    while True:
+        conn, addr = listener.accept()
+        print("[GAZEBO VIDEO] ROS bridge connected:", addr)
+        try:
+            with conn:
+                while True:
+                    header = _recv_exact(conn, 4)
+                    if not header: break
+                    length = struct.unpack("!I", header)[0]
+                    if length < 1 or length > 4_000_000: break
+                    jpeg = _recv_exact(conn, length)
+                    if not jpeg: break
+                    with _frame_lock:
+                        _latest_frame["jpeg"] = jpeg
+                        _latest_frame["updated"] = time.monotonic()
+        except Exception as exc:
+            print("[GAZEBO VIDEO] Receiver error:", repr(exc))
+        print("[GAZEBO VIDEO] Bridge disconnected")
+
+threading.Thread(target=_frame_receiver, daemon=True).start()
+
+class GazeboCameraVideoTrack(VideoStreamTrack):
+    def __init__(self):
+        super().__init__()
+        self.last_notice = 0.0
+
+    async def recv(self):
+        import numpy as np
+        pts, time_base = await self.next_timestamp()
+        with _frame_lock:
+            jpeg, updated = _latest_frame["jpeg"], _latest_frame["updated"]
+        frame = None
+        if jpeg and time.monotonic() - updated < 2.0:
+            frame = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if frame is None:
+            frame = np.zeros((CAMERA_HEIGHT, CAMERA_WIDTH, 3), dtype=np.uint8)
+            if time.monotonic() - self.last_notice > 5:
+                print("[GAZEBO VIDEO] Waiting for first Gazebo image frame")
+                self.last_notice = time.monotonic()
+        result = VideoFrame.from_ndarray(frame, format="bgr24")
+        result.pts, result.time_base = pts, time_base
+        return result
 
 
 def validate_joint_targets(data):
@@ -233,170 +299,97 @@ def validate_phone_orientation(data):
     }
 
 
-async def create_webrtc_session(websocket):
-    print("[WEBRTC] Creating peer connection")
+
+async def create_webrtc_session(websocket, viewer):
+    print(f"[WEBRTC] Creating {viewer} peer")
     pc = RTCPeerConnection(RTC_CONFIG)
-    camera = open_camera_optional()
-    if camera is not None:
-        pc.addTrack(camera)
+    camera = GazeboCameraVideoTrack()
+    pc.addTrack(camera)
+    joint_channel = imu_channel = None
+    if viewer == "browser":
+        joint_channel = pc.createDataChannel("joint-control")
+        imu_channel = pc.createDataChannel("imu-control")
 
-    # These exact names must match the browser's DataChannel lookups.
-    joint_channel = pc.createDataChannel("joint-control")
-    imu_channel = pc.createDataChannel("imu-control")
-    latest_joint_packet_time = {"value": time.monotonic()}
+        @joint_channel.on("message")
+        def on_joint(message):
+            try:
+                if isinstance(message, bytes): message = message.decode()
+                packet = validate_joint_targets(json.loads(message))
+                if packet: send_to_gazebo(packet)
+                else: print("[DATA] Dropped invalid joint packet")
+            except Exception as exc: print("[DATA] Joint message error:", repr(exc))
 
-    @joint_channel.on("open")
-    def joint_open():
-        print("[DATA] joint-control open")
-
-    @joint_channel.on("close")
-    def joint_close():
-        print("[DATA] joint-control closed")
-
-    @joint_channel.on("message")
-    def joint_message(message):
-        try:
-            if isinstance(message, bytes):
-                message = message.decode("utf-8")
-            data = json.loads(message)
-            if data.get("type") == "test":
-                print("[DATA] Joint channel test:", data)
-                return
-            packet = validate_joint_targets(data)
-            if packet is None:
-                print("[DATA] Dropped invalid joint packet")
-                return
-            latest_joint_packet_time["value"] = time.monotonic()
-            print("[JOINT TARGETS] seq=", packet.get("sequence"), packet["arms"], packet["gripper"])
-            send_to_gazebo(packet)
-        except Exception as exc:
-            print("[DATA] Invalid joint-control message:", repr(exc))
-
-    @imu_channel.on("open")
-    def imu_open():
-        print("[DATA] imu-control open")
-
-    @imu_channel.on("close")
-    def imu_close():
-        print("[DATA] imu-control closed")
-
-    @imu_channel.on("message")
-    def imu_message(message):
-        try:
-            if isinstance(message, bytes):
-                message = message.decode("utf-8")
-            data = json.loads(message)
-            if data.get("type") == "test":
-                print("[DATA] IMU channel test:", data)
-                return
-            packet = validate_head_orientation(data)
-            if packet is None:
-                print("[DATA] Dropped invalid phone orientation packet")
-                return
-            print("[GYRO]", packet["gyro"])
-            send_to_gazebo(packet)
-        except Exception as exc:
-            print("[DATA] Invalid phone orientation message:", repr(exc))
+        @imu_channel.on("message")
+        def on_imu(message):
+            try:
+                if isinstance(message, bytes): message = message.decode()
+                packet = validate_phone_orientation(json.loads(message))
+                if packet: send_to_gazebo(packet)
+                else: print("[DATA] Dropped invalid phone orientation")
+            except Exception as exc: print("[DATA] IMU message error:", repr(exc))
 
     @pc.on("connectionstatechange")
-    async def connection_state_change():
-        print("[WEBRTC] Connection state:", pc.connectionState)
-        if pc.connectionState in ("failed", "closed"):
-            # No commands should be generated by this peer after closure.
-            return
+    async def state_changed():
+        print(f"[WEBRTC] {viewer} state:", pc.connectionState)
 
     offer = await pc.createOffer()
     await pc.setLocalDescription(offer)
-    deadline = time.monotonic() + 10.0
+    deadline = time.monotonic() + 10
     while pc.iceGatheringState != "complete" and time.monotonic() < deadline:
         await asyncio.sleep(0.1)
     await websocket.send(json.dumps({
-        "type": pc.localDescription.type,
-        "sdp": pc.localDescription.sdp,
+        "type": pc.localDescription.type, "sdp": pc.localDescription.sdp, "viewer": viewer
     }))
-    print("[WEBRTC] Offer sent; waiting for browser answer")
-    return pc, camera, joint_channel, imu_channel
+    print(f"[WEBRTC] {viewer} offer sent")
+    return {"pc": pc, "camera": camera, "joint": joint_channel, "imu": imu_channel}
+
 
 
 async def run_robot():
     while True:
-        pc = camera = joint_channel = imu_channel = None
+        peers = {}
         try:
-            print("\n" + "=" * 55)
-            print(f"[ROBOT] ID: {ROBOT_ID}")
-            print(f"[ROBOT] Signaling: {SIGNALING_SERVER}")
-            print(f"[ROBOT] Physical follower: DISABLED (enforced)")
-            print(f"[ROBOT] Gazebo UDP bridge: {SIMULATION_ENABLED} -> {SIMULATION_IPC_ADDRESS}")
-            print("=" * 55)
-            async with websockets.connect(
-                SIGNALING_SERVER, ping_interval=20, ping_timeout=20, max_size=2**20
-            ) as websocket:
-                await websocket.send(json.dumps({
-                    "role": "robot", "robot_id": ROBOT_ID, "token": ROBOT_TOKEN
-                }))
+            print(f"[ROBOT] {ROBOT_ID} | signaling={SIGNALING_SERVER} | physical follower DISABLED")
+            async with websockets.connect(SIGNALING_SERVER, ping_interval=20, ping_timeout=20, max_size=2**20) as websocket:
+                await websocket.send(json.dumps({"role": "robot", "robot_id": ROBOT_ID, "token": ROBOT_TOKEN}))
                 async for raw in websocket:
-                    try:
-                        data = json.loads(raw)
-                    except json.JSONDecodeError:
-                        print("[SERVER] Invalid JSON")
-                        continue
-                    msg_type = data.get("type")
-                    if msg_type == "authenticated":
-                        print("[ROBOT] Authenticated with signaling server")
-                    elif msg_type == "browser_ready":
-                        if pc is not None:
-                            await pc.close()
-                        if camera is not None:
-                            camera.stop()
-                        pc, camera, joint_channel, imu_channel = await create_webrtc_session(websocket)
-                    elif msg_type == "head_gyro":
-                        # Backward-compatible angular-velocity packet path.
-                        packet = validate_head_orientation(data)
-                        if packet is None:
-                            print("[MOBILE ORIENTATION] Dropped invalid/stale yaw/pitch packet")
-                            continue
-                        print("[MOBILE GYRO]", packet["gyro"])
-                        send_to_gazebo(packet)
-                    elif msg_type == "head_orientation":
-                        # Phone-only page sends calibrated relative yaw and pitch angles.
+                    try: data = json.loads(raw)
+                    except json.JSONDecodeError: continue
+                    kind = data.get("type")
+                    if kind == "authenticated":
+                        print("[ROBOT] Signaling authentication successful")
+                    elif kind in ("browser_ready", "mobile_ready"):
+                        viewer = "browser" if kind == "browser_ready" else "mobile"
+                        previous = peers.pop(viewer, None)
+                        if previous: await previous["pc"].close()
+                        peers[viewer] = await create_webrtc_session(websocket, viewer)
+                    elif kind in ("head_orientation", "head_gyro"):
                         packet = validate_phone_orientation(data)
-                        if packet is None:
-                            print("[MOBILE ORIENTATION] Dropped invalid/stale orientation packet")
-                            continue
-                        print("[MOBILE ORIENTATION]", packet["orientation"])
-                        send_to_gazebo(packet)
-                    elif msg_type == "answer":
-                        if pc is None:
-                            print("[WEBRTC] Answer received without active peer")
-                            continue
-                        await pc.setRemoteDescription(RTCSessionDescription(
-                            sdp=data["sdp"], type=data.get("type", "answer")
-                        ))
-                        print("[WEBRTC] Browser answer accepted")
-                    elif msg_type == "browser_disconnected":
-                        print("[ROBOT] Operator disconnected")
-                        if pc is not None:
-                            await pc.close()
-                        if camera is not None:
-                            camera.stop()
-                        pc = camera = joint_channel = imu_channel = None
+                        if packet: send_to_gazebo(packet)
+                    elif kind == "answer":
+                        viewer = data.get("viewer", "browser")
+                        peer = peers.get(viewer)
+                        if peer:
+                            await peer["pc"].setRemoteDescription(RTCSessionDescription(sdp=data["sdp"], type=data.get("type", "answer")))
+                            print(f"[WEBRTC] {viewer} answer accepted")
+                        else: print(f"[WEBRTC] No active {viewer} peer for answer")
+                    elif kind in ("browser_disconnected", "mobile_disconnected"):
+                        viewer = "browser" if kind == "browser_disconnected" else "mobile"
+                        peer = peers.pop(viewer, None)
+                        if peer: await peer["pc"].close()
+                        print(f"[ROBOT] {viewer} viewer disconnected")
                     else:
-                        print("[SERVER] Unhandled signaling message:", msg_type)
+                        print("[SERVER] Unhandled message:", kind)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
             print("[ROBOT] Connection error:", repr(exc))
         finally:
-            if pc is not None:
-                try:
-                    await pc.close()
-                except Exception:
-                    pass
-            if camera is not None:
-                try:
-                    camera.stop()
-                except Exception:
-                    pass
+            for peer in peers.values():
+                try: await peer["pc"].close()
+                except Exception: pass
+                try: peer["camera"].stop()
+                except Exception: pass
         print("[ROBOT] Reconnecting in 3 seconds")
         await asyncio.sleep(3)
 

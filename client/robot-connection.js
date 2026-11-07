@@ -219,7 +219,8 @@ export function createRobotConnection(handlers = {}) {
 
         ws.send(JSON.stringify({
             type: pc.localDescription.type,
-            sdp: pc.localDescription.sdp
+            sdp: pc.localDescription.sdp,
+            viewer: "browser"
         }));
 
         console.log("[WEBRTC] SDP answer sent");
