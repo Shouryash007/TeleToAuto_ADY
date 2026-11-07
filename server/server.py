@@ -268,7 +268,9 @@ async def get_robots(request: Request):
             "robot_id": robot_id,
             "online": robot_id in robot_connections,
             "busy": robot_id in browser_connections,
-            "used_by": browser_users.get(robot_id)
+            "used_by": browser_users.get(robot_id),
+            "mobile_busy": robot_id in mobile_connections,
+            "mobile_used_by": mobile_users.get(robot_id)
         })
 
     return {
@@ -474,23 +476,22 @@ async def websocket_endpoint(
                 await websocket.close(code=4004)
                 return
 
-            # The phone is a secondary sensor for the laptop operator.
-            # It must use the same account that currently owns the browser reservation.
-            if (
-                robot_id not in browser_connections
-                or browser_users.get(robot_id) != username
-            ):
-                await websocket.send_text(json.dumps({
-                    "type": "error",
-                    "message": "Open this robot on the laptop first using the same account."
-                }))
-                await websocket.close(code=4004)
-                return
+            # The phone has an independent slot; it does not require a browser reservation.
+            existing_mobile = mobile_connections.get(robot_id)
+            if existing_mobile is not None and existing_mobile is not websocket:
+                if mobile_users.get(robot_id) != username:
+                    await websocket.send_text(json.dumps({
+                        "type": "error",
+                        "message": f"Robot is already controlled by {mobile_users.get(robot_id)}"
+                    }))
+                    await websocket.close(code=4004)
+                    return
+                # Same user reconnecting after a page reload: replace the stale socket.
+                try:
+                    await existing_mobile.close(code=4002)
+                except Exception:
+                    pass
 
-            previous_mobile = mobile_connections.get(robot_id)
-            if previous_mobile and previous_mobile is not websocket:
-                try: await previous_mobile.close(code=4002)
-                except Exception: pass
             mobile_connections[robot_id] = websocket
             mobile_users[robot_id] = username
             await websocket.send_text(json.dumps({
@@ -594,33 +595,28 @@ async def websocket_endpoint(
             # ------------------------------------------------
             # Only one operator can reserve a robot at a time.
 
-            existing_browser = browser_connections.get(
-                robot_id
-            )
+            existing_browser = browser_connections.get(robot_id)
 
-            if existing_browser:
-
-                await websocket.send_text(
-                    json.dumps({
+            if existing_browser is not None and existing_browser is not websocket:
+                if browser_users.get(robot_id) != username:
+                    await websocket.send_text(json.dumps({
                         "type": "error",
-                        "message":
-                            "Robot is currently being used by another operator"
-                    })
-                )
+                        "message": "Robot is currently being used by another operator"
+                    }))
+                    await websocket.close(code=4004)
+                    print(
+                        f"[ACCESS] {username} denied access to "
+                        f"{robot_id} - already in use"
+                    )
+                    return
 
-                await websocket.close(
-                    code=4004
-                )
+                # Same user reconnecting after a page reload: replace stale socket.
+                try:
+                    await existing_browser.close(code=4002)
+                except Exception:
+                    pass
 
-                print(
-                    f"[ACCESS] {username} denied access to "
-                    f"{robot_id} - already in use"
-                )
-
-                return
-
-
-            # No existing operator -> reserve robot
+            # Reserve the browser slot (or replace this user's stale socket).
             browser_connections[robot_id] = websocket
             browser_users[robot_id] = username
 
@@ -718,7 +714,7 @@ async def websocket_endpoint(
                 # Also mirror the phone's GX/GY values to the reserved laptop UI.
                 # GX is relative yaw and GY is relative pitch, displayed in degrees.
                 browser = browser_connections.get(robot_id)
-                if browser and browser_users.get(robot_id) == username:
+                if browser:
                     readout = {
                         "type": "mobile_imu_readout",
                         "gx": yaw * 180.0 / math.pi,
@@ -818,6 +814,15 @@ async def websocket_endpoint(
                     except Exception:
                         pass
 
+                mobile = mobile_connections.get(robot_id)
+                if mobile:
+                    try:
+                        await mobile.send_text(json.dumps({
+                            "type": "robot_disconnected"
+                        }))
+                    except Exception:
+                        pass
+
         # ====================================================
         # MOBILE CLEANUP
         # ====================================================
@@ -844,13 +849,6 @@ async def websocket_endpoint(
             ):
                 del browser_connections[robot_id]
                 browser_users.pop(robot_id, None)
-                mobile = mobile_connections.pop(robot_id, None)
-                mobile_users.pop(robot_id, None)
-                if mobile:
-                    try:
-                        await mobile.send_text(json.dumps({"type": "operator_disconnected"}))
-                        await mobile.close(code=4004)
-                    except Exception: pass
 
                 print(
                     f"[USER] {username} "

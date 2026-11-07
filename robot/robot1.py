@@ -141,9 +141,9 @@ def open_camera_optional():
 
 
 
-# Shared latest decoded frame: decode each Gazebo JPEG once, not once per viewer.
 _latest_frame = {"bgr": None, "updated": 0.0}
 _frame_lock = threading.Lock()
+_stats = {"n": 0, "t": time.monotonic()}
 
 def _recv_exact(conn, size):
     data = bytearray()
@@ -173,13 +173,23 @@ def _frame_receiver():
                     jpeg = _recv_exact(conn, length)
                     if not jpeg: break
                     import numpy as np
-                    decoded = cv2.imdecode(
-                        np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR
-                    )
+                    t0 = time.monotonic()
+                    decoded = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
+                    decode_ms = (time.monotonic() - t0) * 1000.0
+                    now = time.monotonic()
                     if decoded is not None:
                         with _frame_lock:
                             _latest_frame["bgr"] = decoded
-                            _latest_frame["updated"] = time.monotonic()
+                            _latest_frame["updated"] = now
+                        _stats["n"] += 1
+                        elapsed = now - _stats["t"]
+                        if elapsed >= 2.0:
+                            print(
+                                f"[GAZEBO VIDEO] in: {_stats['n'] / elapsed:.1f} fps, "
+                                f"decode {decode_ms:.1f} ms, {len(jpeg) / 1024:.1f} KB"
+                            )
+                            _stats["n"] = 0
+                            _stats["t"] = now
         except Exception as exc:
             print("[GAZEBO VIDEO] Receiver error:", repr(exc))
         print("[GAZEBO VIDEO] Bridge disconnected")
@@ -190,6 +200,7 @@ class GazeboCameraVideoTrack(VideoStreamTrack):
     def __init__(self):
         super().__init__()
         self.last_notice = 0.0
+        self.last_age_log = 0.0
 
     async def recv(self):
         import numpy as np
@@ -197,12 +208,16 @@ class GazeboCameraVideoTrack(VideoStreamTrack):
         with _frame_lock:
             frame = _latest_frame["bgr"]
             updated = _latest_frame["updated"]
-        # Keep only the newest frame; never build a queue of stale camera images.
-        if frame is None or time.monotonic() - updated >= 2.0:
+        now = time.monotonic()
+        age_ms = (now - updated) * 1000.0 if updated else float("inf")
+        if updated and now - self.last_age_log >= 2.0:
+            print(f"[GAZEBO VIDEO] outgoing frame age: {age_ms:.1f} ms")
+            self.last_age_log = now
+        if frame is None or age_ms >= 2000.0:
             frame = np.zeros((CAMERA_HEIGHT, CAMERA_WIDTH, 3), dtype=np.uint8)
-            if time.monotonic() - self.last_notice > 5:
+            if now - self.last_notice > 5:
                 print("[GAZEBO VIDEO] Waiting for first Gazebo image frame")
-                self.last_notice = time.monotonic()
+                self.last_notice = now
         result = VideoFrame.from_ndarray(frame, format="bgr24")
         result.pts, result.time_base = pts, time_base
         return result
