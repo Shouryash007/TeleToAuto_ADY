@@ -35,7 +35,7 @@ class GyroToGazebo(Node):
             10
         )
 
-        # Revolute 19: camera pitch
+        # Revolute 19: camera pitch (head nod)
         self.pitch_pub = self.create_publisher(
             Float64MultiArray,
             "/camera_pitch_position_controller/commands",

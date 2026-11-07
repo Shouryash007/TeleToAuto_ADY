@@ -34,7 +34,7 @@
 <main>
   <section class="card">
     <h1>Phone Gyroscope</h1>
-    <p>Minimal sensor page. It sends only GX and GY readings to the robot simulation. Keep your laptop operator page open separately.</p>
+    <p>Minimal sensor page. It sends head-turn yaw and head-nod pitch to the robot simulation. Keep your laptop operator page open separately.</p>
     <div id="status" class="status" role="status">Not logged in</div>
   </section>
 
@@ -54,15 +54,15 @@
 
   <section id="sensorCard" class="card hidden">
     <h2>Gyroscope input</h2>
-    <p class="hint">Uses the same phone orientation sensor as the website gyro block. Hold the phone in your neutral position and press Calibrate, then rotate it to send relative yaw and pitch angles.</p>
+    <p class="hint">Hold the phone in landscape with the screen facing you and its top edge pointing to your left. Keep it still and press Calibrate. Turn your head left/right for yaw and nod up/down for pitch.</p>
     <div class="readings">
-      <div class="reading"><span>GX · Yaw</span><strong id="gx">0.0°</strong></div>
-      <div class="reading"><span>GY · Pitch</span><strong id="gy">0.0°</strong></div>
+      <div class="reading"><span>Head turn · Yaw</span><strong id="yaw">0.0°</strong></div>
+      <div class="reading"><span>Head nod · Pitch</span><strong id="pitch">0.0°</strong></div>
     </div>
     <button id="startButton">Enable phone gyroscope</button>
     <button id="calibrateButton" class="secondary" disabled>Calibrate zero</button>
     <button id="stopButton" class="stop" disabled>Stop sending</button>
-    <p class="hint">Sensor permission is requested only after pressing Enable. Keep the phone page visible while testing. Values are relative angles in degrees.</p>
+    <p class="hint">Sensor permission is requested only after pressing Enable. Keep the phone page visible while testing. Values are relative angles in degrees. Keep the phone in the calibrated landscape position.</p>
     <button id="logoutButton" class="secondary">Logout</button>
   </section>
 </main>

@@ -1,11 +1,16 @@
 <?xml version="1.0"?>
 <robot name="abhi_camera">
 
-  <!-- Root frame: represents the original upper_chesses_1 frame -->
-  <link name="base_link"/>
+  <link name="base_link">
+    <!-- Temporary physically valid inertia for Gazebo Classic.
+         Replace with CAD-derived mass/inertia when available. -->
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="2.0"/>
+      <inertia ixx="0.02" ixy="0" ixz="0"
+               iyy="0.02" iyz="0" izz="0.02"/>
+    </inertial>
 
-  <!-- Original camera support -->
-  <link name="arm_stand_1">
     <visual>
       <origin xyz="0.7 0.170034 -0.165" rpy="0 0 0"/>
       <geometry>
@@ -13,7 +18,7 @@
               scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="dark_grey">
-        <color rgba="0.25 0.27 0.30 1"/>
+        <color rgba="0.25 0.27 0.90 1"/>
       </material>
     </visual>
     <collision>
@@ -25,7 +30,6 @@
     </collision>
   </link>
 
-  <!-- Revolving camera stand -->
   <link name="camer_z_stand_1">
     <inertial>
       <origin xyz="0 -0.0000169114 0.0770071" rpy="0 0 0"/>
@@ -54,7 +58,6 @@
     </collision>
   </link>
 
-  <!-- Camera body -->
   <link name="depth_camera_1">
     <inertial>
       <origin xyz="0 0.0599999 0" rpy="0 0 0"/>
@@ -83,22 +86,13 @@
     </collision>
   </link>
 
-  <!-- Original Rigid 16: support fixed to the original robot reference -->
-  <joint name="camera_support_fixed" type="fixed">
-    <origin xyz="-0.2 0 0.11" rpy="0 0 0"/>
-    <parent link="base_link"/>
-    <child link="arm_stand_1"/>
-  </joint>
-
-  <!-- Original Revolute 18: Z-axis rotation -->
   <joint name="revolute_18" type="continuous">
     <origin xyz="0 0 0.6" rpy="0 0 0"/>
-    <parent link="arm_stand_1"/>
+    <parent link="base_link"/>
     <child link="camer_z_stand_1"/>
     <axis xyz="0 0 -1"/>
   </joint>
 
-  <!-- Original Revolute 19: Y-axis rotation -->
   <joint name="revolute_19" type="continuous">
     <origin xyz="0 -0.060115 0.155" rpy="0 0 0"/>
     <parent link="camer_z_stand_1"/>
@@ -106,7 +100,6 @@
     <axis xyz="0 1 0"/>
   </joint>
 
-  <!-- ROS 2 control interfaces -->
   <ros2_control name="AbhiCameraSystem" type="system">
     <hardware>
       <plugin>gazebo_ros2_control/GazeboSystem</plugin>
@@ -125,16 +118,14 @@
     </joint>
   </ros2_control>
 
-  <!-- Gazebo ROS 2 control plugin -->
   <gazebo>
-    <plugin name="gazebo_ros2_control"
-            filename="libgazebo_ros2_control.so">
-      <parameters>/tmp/abhi_camera_controllers.yaml</parameters>
+    <plugin filename="libgazebo_ros2_control.so"
+            name="gazebo_ros2_control">
+        <parameters>/tmp/abhi_camera_controllers.yaml</parameters>
     </plugin>
   </gazebo>
 
-  <!-- Gazebo mesh colours -->
-  <gazebo reference="arm_stand_1">
+  <gazebo reference="base_link">
     <material>Gazebo/DarkGrey</material>
   </gazebo>
 

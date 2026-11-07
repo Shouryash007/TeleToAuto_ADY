@@ -206,7 +206,7 @@ def validate_head_orientation(data):
 
 
 def validate_phone_orientation(data):
-    """Validate relative yaw/pitch angles in radians from the phone page."""
+    """Validate calibrated relative yaw/pitch angles in radians from the phone page."""
     if data.get("type") != "head_orientation":
         return None
     orientation = data.get("orientation")
@@ -291,12 +291,12 @@ async def create_webrtc_session(websocket):
                 return
             packet = validate_head_orientation(data)
             if packet is None:
-                print("[DATA] Dropped invalid gx/gy packet")
+                print("[DATA] Dropped invalid phone orientation packet")
                 return
             print("[GYRO]", packet["gyro"])
             send_to_gazebo(packet)
         except Exception as exc:
-            print("[DATA] Invalid gx/gy message:", repr(exc))
+            print("[DATA] Invalid phone orientation message:", repr(exc))
 
     @pc.on("connectionstatechange")
     async def connection_state_change():
@@ -353,12 +353,12 @@ async def run_robot():
                         # Backward-compatible angular-velocity packet path.
                         packet = validate_head_orientation(data)
                         if packet is None:
-                            print("[MOBILE GYRO] Dropped invalid/stale gx/gy packet")
+                            print("[MOBILE ORIENTATION] Dropped invalid/stale yaw/pitch packet")
                             continue
                         print("[MOBILE GYRO]", packet["gyro"])
                         send_to_gazebo(packet)
                     elif msg_type == "head_orientation":
-                        # Phone-only page now uses the same relative angle method as the website.
+                        # Phone-only page sends calibrated relative yaw and pitch angles.
                         packet = validate_phone_orientation(data)
                         if packet is None:
                             print("[MOBILE ORIENTATION] Dropped invalid/stale orientation packet")
