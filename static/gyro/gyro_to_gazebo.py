@@ -28,14 +28,14 @@ class GyroToGazebo(Node):
         self.port = int(self.get_parameter("udp_port").value)
         self.scale = float(self.get_parameter("gyro_scale").value)
 
-        # Revolute 18: camera yaw (phone YAW channel)
+        # Revolute_18: camera yaw (phone YAW channel)
         self.yaw_pub = self.create_publisher(
             Float64MultiArray,
             "/camera_yaw_position_controller/commands",
             10
         )
 
-        # Revolute 19: vertical tilt controller (project's phone ROLL channel)
+        # Revolute_19: vertical tilt controller (project's phone ROLL channel)
         self.pitch_pub = self.create_publisher(
             Float64MultiArray,
             "/camera_pitch_position_controller/commands",
@@ -152,11 +152,14 @@ class GyroToGazebo(Node):
 
                 self.publish_commands()
 
-                self.get_logger().info(
-                    f"Phone {address[0]} | "
-                    f"Yaw: {self.yaw:+.3f} rad | "
-                    f"Roll: {self.roll:+.3f} rad"
-                )
+                # Log at a low rate to avoid flooding the terminal.
+                if not hasattr(self, "_last_log") or time.monotonic() - self._last_log > 1.0:
+                    self.get_logger().info(
+                        f"Phone {address[0]} | "
+                        f"Joint 18 yaw: {self.yaw:+.3f} rad | "
+                        f"Joint 19 tilt: {self.roll:+.3f} rad"
+                    )
+                    self._last_log = time.monotonic()
 
             except (
                 UnicodeDecodeError,

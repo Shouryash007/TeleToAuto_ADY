@@ -25,5 +25,8 @@ in json add the class of that roboot.
 7. after re-login does it show robot status correctly:
 8. If the robot is being used by another operator does it show the status:
 
-to launch the so101 handtrack:
+to launch the so101 handtrack single hand:
 ros2 launch ./so101_gazebo.launch.py urdf_file:=$PWD/so101_new_calib.urdf camera_index:=1
+to launch the so101 handtrack dual hand:
+ros2 launch ./so101_dual_gazebo.launch.py urdf_file:=$PWD/so101_new_calib.urdf camera_index:=1 2>&1 | tee launch.log
+
