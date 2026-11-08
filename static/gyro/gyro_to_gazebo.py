@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 
 import json
@@ -21,36 +20,40 @@ class GyroToGazebo(Node):
         super().__init__("gyro_to_gazebo")
 
         self.declare_parameter("bind_host", "0.0.0.0")
-        self.declare_parameter("udp_port", 8766)
+
+        # Matches robot1.py orientation UDP destination.
+        self.declare_parameter("udp_port", 8769)
+
         self.declare_parameter("gyro_scale", 1.0)
 
         self.host = str(self.get_parameter("bind_host").value)
         self.port = int(self.get_parameter("udp_port").value)
         self.scale = float(self.get_parameter("gyro_scale").value)
 
-        # Revolute_18: camera yaw (phone YAW channel)
+        # Revolute_18: camera horizontal rotation.
         self.yaw_pub = self.create_publisher(
             Float64MultiArray,
             "/camera_yaw_position_controller/commands",
-            10
+            10,
         )
 
-        # Revolute_19: vertical tilt controller (project's phone ROLL channel)
+        # Revolute_19: camera vertical rotation.
+        # Phone ROLL controls this joint.
         self.pitch_pub = self.create_publisher(
             Float64MultiArray,
             "/camera_pitch_position_controller/commands",
-            10
+            10,
         )
 
         self.sock = socket.socket(
             socket.AF_INET,
-            socket.SOCK_DGRAM
+            socket.SOCK_DGRAM,
         )
 
         self.sock.setsockopt(
             socket.SOL_SOCKET,
             socket.SO_REUSEADDR,
-            1
+            1,
         )
 
         self.sock.bind((self.host, self.port))
@@ -59,14 +62,16 @@ class GyroToGazebo(Node):
         self.yaw = 0.0
         self.roll = 0.0
         self.last_gyro_time = None
+        self.last_log = 0.0
 
         self.timer = self.create_timer(
             0.01,
-            self.receive_packets
+            self.receive_packets,
         )
 
         self.get_logger().info(
-            f"Listening for phone yaw/roll orientation on {self.host}:{self.port}"
+            f"Listening for phone yaw/roll orientation "
+            f"on {self.host}:{self.port}"
         )
 
     def publish_commands(self):
@@ -97,9 +102,13 @@ class GyroToGazebo(Node):
             try:
 
                 packet = json.loads(raw.decode("utf-8"))
+
+                if not isinstance(packet, dict):
+                    continue
+
                 packet_type = packet.get("type")
 
-                # Absolute phone orientation in radians
+                # Absolute phone orientation in radians.
                 if packet_type == "head_orientation":
 
                     orientation = packet.get("orientation") or {}
@@ -107,7 +116,10 @@ class GyroToGazebo(Node):
                     yaw = float(orientation.get("yaw", 0.0))
                     roll = float(orientation.get("roll", 0.0))
 
-                    if not math.isfinite(yaw) or not math.isfinite(roll):
+                    if (
+                        not math.isfinite(yaw)
+                        or not math.isfinite(roll)
+                    ):
                         continue
 
                     self.yaw = clamp(yaw, -1.4, 1.4)
@@ -115,7 +127,7 @@ class GyroToGazebo(Node):
 
                     self.last_gyro_time = None
 
-                # Integrated gyroscope data in degrees/second
+                # Integrated gyroscope data in degrees/second.
                 elif packet_type == "head_gyro":
 
                     gyro = packet.get("gyro") or {}
@@ -123,28 +135,37 @@ class GyroToGazebo(Node):
                     gx = float(gyro.get("gx", 0.0))
                     gy = float(gyro.get("gy", 0.0))
 
-                    if not math.isfinite(gx) or not math.isfinite(gy):
+                    if (
+                        not math.isfinite(gx)
+                        or not math.isfinite(gy)
+                    ):
                         continue
 
                     now = time.monotonic()
 
                     dt = (
-                        0.0 if self.last_gyro_time is None
-                        else min(now - self.last_gyro_time, 0.1)
+                        0.0
+                        if self.last_gyro_time is None
+                        else min(
+                            now - self.last_gyro_time,
+                            0.1,
+                        )
                     )
 
                     self.last_gyro_time = now
 
                     self.yaw = clamp(
-                        self.yaw + math.radians(gx) * dt * self.scale,
+                        self.yaw
+                        + math.radians(gx) * dt * self.scale,
                         -1.4,
-                        1.4
+                        1.4,
                     )
 
                     self.roll = clamp(
-                        self.roll + math.radians(gy) * dt * self.scale,
+                        self.roll
+                        + math.radians(gy) * dt * self.scale,
                         -1.0,
-                        1.0
+                        1.0,
                     )
 
                 else:
@@ -153,19 +174,24 @@ class GyroToGazebo(Node):
                 self.publish_commands()
 
                 # Log at a low rate to avoid flooding the terminal.
-                if not hasattr(self, "_last_log") or time.monotonic() - self._last_log > 1.0:
+                now = time.monotonic()
+
+                if now - self.last_log > 1.0:
+
                     self.get_logger().info(
                         f"Phone {address[0]} | "
-                        f"Joint 18 yaw: {self.yaw:+.3f} rad | "
-                        f"Joint 19 tilt: {self.roll:+.3f} rad"
+                        f"Camera yaw: {self.yaw:+.3f} rad | "
+                        f"Camera vertical tilt (phone roll): "
+                        f"{self.roll:+.3f} rad"
                     )
-                    self._last_log = time.monotonic()
+
+                    self.last_log = now
 
             except (
                 UnicodeDecodeError,
                 json.JSONDecodeError,
                 TypeError,
-                ValueError
+                ValueError,
             ) as error:
 
                 self.get_logger().warning(
@@ -173,7 +199,12 @@ class GyroToGazebo(Node):
                 )
 
     def destroy_node(self):
-        self.sock.close()
+
+        try:
+            self.sock.close()
+        except OSError:
+            pass
+
         super().destroy_node()
 
 

@@ -1,4 +1,4 @@
-<?xml version="1.0"?>
+<?xml version='1.0' encoding='utf-8'?>
 <robot name="ABHI_mobile">
   <material name="silver">
     <color rgba="0.75 0.75 0.78 1.0" />
@@ -265,9 +265,9 @@
   </link>
   <link name="joint1_R_1">
     <inertial>
-      <origin xyz="0.031020247048734406 0.0012955576278789738 -0.0014725895564903224" rpy="0 0 0" />
-      <mass value="0.59151439434219" />
-      <inertia ixx="0.000465" iyy="0.000503" izz="0.000169" ixy="-2e-06" iyz="2e-06" ixz="3.9e-05" />
+      <origin xyz="-0.0307604 -1.66727e-05 -0.0252713" rpy="0 0 0" />
+      <mass value="0.100006" />
+      <inertia ixx="8.3759e-05" ixy="7.55525e-08" ixz="-1.16342e-06" iyy="8.10403e-05" iyz="1.54663e-07" izz="2.39783e-05" />
     </inertial>
     <visual>
       <origin xyz="0.62432 0.258381 -0.707592" rpy="0 0 0" />
@@ -277,17 +277,29 @@
       <material name="silver" />
     </visual>
     <collision>
-      <origin xyz="0.62432 0.258381 -0.707592" rpy="0 0 0" />
+      <origin xyz="-0.0303992 0.000422241 -0.0417" rpy="1.5708 1.5708 0" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint1_R_1.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_v1.stl" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="-0.0675992 -0.000177759 0.0158499" rpy="1.5708 -1.5708 0" />
+      <geometry>
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/motor_holder_so101_base_v1.stl" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="0.0122008 2.22413e-05 0.0464" rpy="-1.5708 2.35221e-33 0" />
+      <geometry>
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/rotation_pitch_so101_v1.stl" />
       </geometry>
     </collision>
   </link>
   <link name="joint2_R_1">
     <inertial>
-      <origin xyz="0.04005744512584297 0.02115401418069357 -0.04964670030217433" rpy="0 0 0" />
-      <mass value="0.8364344227879003" />
-      <inertia ixx="0.000904" iyy="0.001119" izz="0.000755" ixy="-1.9e-05" iyz="3.2e-05" ixz="0.000512" />
+      <origin xyz="-0.0898471 -0.00838224 0.0184089" rpy="0 0 0" />
+      <mass value="0.103" />
+      <inertia ixx="4.08002e-05" ixy="-1.97819e-05" ixz="-4.03016e-08" iyy="0.000147318" iyz="8.97326e-09" izz="0.000142487" />
     </inertial>
     <visual>
       <origin xyz="0.591409 0.277859 -0.652216" rpy="0 0 0" />
@@ -297,17 +309,23 @@
       <material name="silver" />
     </visual>
     <collision>
-      <origin xyz="0.591409 0.277859 -0.652216" rpy="0 0 0" />
+      <origin xyz="-0.11257 -0.0155 0.0187" rpy="-3.14159 -5.27356e-16 -1.5708" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint2_R_1.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_v1.stl" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="-0.065085 0.012 0.0182" rpy="3.14159 -0 -1.30911e-30" />
+      <geometry>
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/upper_arm_so101_v1.stl" />
       </geometry>
     </collision>
   </link>
   <link name="joint3_R_1">
     <inertial>
-      <origin xyz="0.046185810073450295 0.021577918415941255 -0.04593763247970439" rpy="0 0 0" />
-      <mass value="0.9815021141330523" />
-      <inertia ixx="0.001087" iyy="0.001473" izz="0.001106" ixy="-9e-06" iyz="2.1e-05" ixz="0.000691" />
+      <origin xyz="-0.0980701 0.00324376 0.0182831" rpy="0 0 0" />
+      <mass value="0.104" />
+      <inertia ixx="2.87438e-05" ixy="7.41152e-06" ixz="1.26409e-06" iyy="0.000159844" iyz="-4.90188e-08" izz="0.00014529" />
     </inertial>
     <visual>
       <origin xyz="0.501516 0.273082 -0.561352" rpy="0 0 0" />
@@ -317,17 +335,29 @@
       <material name="silver" />
     </visual>
     <collision>
-      <origin xyz="0.501516 0.273082 -0.561352" rpy="0 0 0" />
+      <origin xyz="-0.0648499 -0.032 0.0182" rpy="3.14159 -0 6.67202e-31" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint3_R_1.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/under_arm_so101_v1.stl" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="-0.0648499 -0.032 0.018" rpy="-3.14159 -2.55351e-15 -1.83387e-30" />
+      <geometry>
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/motor_holder_so101_wrist_v1.stl" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="-0.1224 0.0052 0.0187" rpy="-3.14159 -7.88861e-31 -3.14159" />
+      <geometry>
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_v1.stl" />
       </geometry>
     </collision>
   </link>
   <link name="joint4_R_1">
     <inertial>
-      <origin xyz="0.022800407012668222 0.01920254979092839 -0.01733038680284099" rpy="0 0 0" />
-      <mass value="0.2774777728479894" />
-      <inertia ixx="0.000158" iyy="0.00013" izz="0.000186" ixy="1.4e-05" iyz="-7e-06" ixz="3.8e-05" />
+      <origin xyz="-0.000103312 -0.0386143 0.0281156" rpy="0 0 0" />
+      <mass value="0.079" />
+      <inertia ixx="3.68263e-05" ixy="1.7893e-08" ixz="-5.28128e-08" iyy="2.5391e-05" iyz="3.6412e-06" izz="2.1e-05" />
     </inertial>
     <visual>
       <origin xyz="0.39951 0.269245 -0.457493" rpy="0 0 0" />
@@ -337,17 +367,23 @@
       <material name="silver" />
     </visual>
     <collision>
-      <origin xyz="0.39951 0.269245 -0.457493" rpy="0 0 0" />
+      <origin xyz="8.32667e-17 -0.0424 0.0306" rpy="1.5708 1.5708 0" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint4_R_1.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_no_horn_v1.stl" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="0 -0.028 0.0181" rpy="-1.5708 -1.5708 0" />
+      <geometry>
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/wrist_roll_pitch_so101_v2.stl" />
       </geometry>
     </collision>
   </link>
   <link name="joint5_R_1">
     <inertial>
-      <origin xyz="0.02829800892206452 -0.002341905787937193 -0.008036315258289795" rpy="0 0 0" />
-      <mass value="0.5165205922497822" />
-      <inertia ixx="0.000197" iyy="0.000394" izz="0.000346" ixy="2.4e-05" iyz="1e-05" ixz="1e-05" />
+      <origin xyz="0.000213627 0.000245138 -0.025187" rpy="0 0 0" />
+      <mass value="0.087" />
+      <inertia ixx="2.75087e-05" ixy="-3.35241e-07" ixz="-5.7352e-06" iyy="4.33657e-05" iyz="-5.17847e-08" izz="3.45059e-05" />
     </inertial>
     <visual>
       <origin xyz="0.349385 0.251405 -0.421445" rpy="0 0 0" />
@@ -357,17 +393,23 @@
       <material name="silver" />
     </visual>
     <collision>
-      <origin xyz="0.349385 0.251405 -0.421445" rpy="0 0 0" />
+      <origin xyz="0.0077 0.0001 -0.0234" rpy="-1.5708 -5.19179e-17 -1.66533e-16" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint5_R_1.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_v1.stl" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="8.32667e-17 -0.000218214 0.000949706" rpy="-3.14159 -5.55112e-17 0" />
+      <geometry>
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/wrist_roll_follower_so101_v1.stl" />
       </geometry>
     </collision>
   </link>
   <link name="joint6_R_1">
     <inertial>
-      <origin xyz="0.029006478493675103 0.020103480150832326 -0.00972477611160849" rpy="0 0 0" />
-      <mass value="0.16178926125153403" />
-      <inertia ixx="4e-05" iyy="7.3e-05" izz="7.2e-05" ixy="-2e-06" iyz="-5e-06" ixz="2.7e-05" />
+      <origin xyz="-0.00157495 -0.0300244 0.0192755" rpy="0 0 0" />
+      <mass value="0.012" />
+      <inertia ixx="6.61427e-06" ixy="-3.19807e-07" ixz="-5.90717e-09" iyy="1.89032e-06" iyz="-1.09945e-07" izz="5.28738e-06" />
     </inertial>
     <visual>
       <origin xyz="0.34127 0.264645 -0.387621" rpy="0 0 0" />
@@ -377,9 +419,9 @@
       <material name="silver" />
     </visual>
     <collision>
-      <origin xyz="0.34127 0.264645 -0.387621" rpy="0 0 0" />
+      <origin xyz="-5.55112e-17 -5.55112e-17 0.0189" rpy="9.53145e-17 6.93889e-18 1.24077e-24" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint6_R_1.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/moving_jaw_so101_v1.stl" />
       </geometry>
     </collision>
   </link>
@@ -445,9 +487,9 @@
   </link>
   <link name="joint1_L_1">
     <inertial>
-      <origin xyz="0.030975422937734143 0.002114658645952186 -0.0014725895564898783" rpy="0 0 0" />
-      <mass value="0.59151439434219" />
-      <inertia ixx="0.000465" iyy="0.000503" izz="0.000169" ixy="-2e-06" iyz="3e-06" ixz="3.9e-05" />
+      <origin xyz="-0.0307604 -1.66727e-05 -0.0252713" rpy="0 0 0" />
+      <mass value="0.100006" />
+      <inertia ixx="8.3759e-05" ixy="7.55525e-08" ixz="-1.16342e-06" iyy="8.10403e-05" iyz="1.54663e-07" izz="2.39783e-05" />
     </inertial>
     <visual>
       <origin xyz="0.62432 0.082049 -0.707592" rpy="0 0 0" />
@@ -457,17 +499,29 @@
       <material name="silver" />
     </visual>
     <collision>
-      <origin xyz="0.62432 0.082049 -0.707592" rpy="0 0 0" />
+      <origin xyz="-0.0303992 0.000422241 -0.0417" rpy="1.5708 1.5708 0" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint1_L_1.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_v1.stl" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="-0.0675992 -0.000177759 0.0158499" rpy="1.5708 -1.5708 0" />
+      <geometry>
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/motor_holder_so101_base_v1.stl" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="0.0122008 2.22413e-05 0.0464" rpy="-1.5708 2.35221e-33 0" />
+      <geometry>
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/rotation_pitch_so101_v1.stl" />
       </geometry>
     </collision>
   </link>
   <link name="joint2_L_1">
     <inertial>
-      <origin xyz="0.04111052087564504 0.022181550532253957 -0.04831941193381606" rpy="0 0 0" />
-      <mass value="0.8364344227879003" />
-      <inertia ixx="0.000873" iyy="0.001118" izz="0.000788" ixy="-2.6e-05" iyz="4.4e-05" ixz="0.000514" />
+      <origin xyz="-0.0898471 -0.00838224 0.0184089" rpy="0 0 0" />
+      <mass value="0.103" />
+      <inertia ixx="4.08002e-05" ixy="-1.97819e-05" ixz="-4.03016e-08" iyy="0.000147318" iyz="8.97326e-09" izz="0.000142487" />
     </inertial>
     <visual>
       <origin xyz="0.59097 0.100658 -0.652216" rpy="0 0 0" />
@@ -477,17 +531,23 @@
       <material name="silver" />
     </visual>
     <collision>
-      <origin xyz="0.59097 0.100658 -0.652216" rpy="0 0 0" />
+      <origin xyz="-0.11257 -0.0155 0.0187" rpy="-3.14159 -5.27356e-16 -1.5708" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint2_L_1.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_v1.stl" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="-0.065085 0.012 0.0182" rpy="3.14159 -0 -1.30911e-30" />
+      <geometry>
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/upper_arm_so101_v1.stl" />
       </geometry>
     </collision>
   </link>
   <link name="joint3_L_1">
     <inertial>
-      <origin xyz="0.04714036536576255 0.02274261986257141 -0.04438025897353981" rpy="0 0 0" />
-      <mass value="0.9815021141330523" />
-      <inertia ixx="0.001042" iyy="0.001473" izz="0.001151" ixy="-2.1e-05" iyz="3.7e-05" ixz="0.000688" />
+      <origin xyz="-0.0980701 0.00324376 0.0182831" rpy="0 0 0" />
+      <mass value="0.104" />
+      <inertia ixx="2.87438e-05" ixy="7.41152e-06" ixz="1.26409e-06" iyy="0.000159844" iyz="-4.90188e-08" izz="0.00014529" />
     </inertial>
     <visual>
       <origin xyz="0.498371 0.093605 -0.564265" rpy="0 0 0" />
@@ -497,17 +557,29 @@
       <material name="silver" />
     </visual>
     <collision>
-      <origin xyz="0.498371 0.093605 -0.564265" rpy="0 0 0" />
+      <origin xyz="-0.0648499 -0.032 0.0182" rpy="3.14159 -0 6.67202e-31" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint3_L_1.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/under_arm_so101_v1.stl" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="-0.0648499 -0.032 0.018" rpy="-3.14159 -2.55351e-15 -1.83387e-30" />
+      <geometry>
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/motor_holder_so101_wrist_v1.stl" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="-0.1224 0.0052 0.0187" rpy="-3.14159 -7.88861e-31 -3.14159" />
+      <geometry>
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_v1.stl" />
       </geometry>
     </collision>
   </link>
   <link name="joint4_L_1">
     <inertial>
-      <origin xyz="0.023486124324284152 0.019801358210130737 -0.015658507780220376" rpy="0 0 0" />
-      <mass value="0.2774777728479892" />
-      <inertia ixx="0.000152" iyy="0.000131" izz="0.000191" ixy="1.5e-05" iyz="-6e-06" ixz="3.6e-05" />
+      <origin xyz="-0.000103312 -0.0386143 0.0281156" rpy="0 0 0" />
+      <mass value="0.079" />
+      <inertia ixx="3.68263e-05" ixy="1.7893e-08" ixz="-5.28128e-08" iyy="2.5391e-05" iyz="3.6412e-06" izz="2.1e-05" />
     </inertial>
     <visual>
       <origin xyz="0.393156 0.087178 -0.463789" rpy="0 0 0" />
@@ -517,17 +589,23 @@
       <material name="silver" />
     </visual>
     <collision>
-      <origin xyz="0.393156 0.087178 -0.463789" rpy="0 0 0" />
+      <origin xyz="8.32667e-17 -0.0424 0.0306" rpy="1.5708 1.5708 0" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint4_L_1.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_no_horn_v1.stl" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="0 -0.028 0.0181" rpy="-1.5708 -1.5708 0" />
+      <geometry>
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/wrist_roll_pitch_so101_v2.stl" />
       </geometry>
     </collision>
   </link>
   <link name="joint5_L_1">
     <inertial>
-      <origin xyz="0.026011260103803613 -0.007836978810816825 -0.011526573923522632" rpy="0 0 0" />
-      <mass value="0.5165205922497822" />
-      <inertia ixx="0.000245" iyy="0.000324" izz="0.000368" ixy="6.8e-05" iyz="0.0" ixz="5.4e-05" />
+      <origin xyz="0.000213627 0.000245138 -0.025187" rpy="0 0 0" />
+      <mass value="0.087" />
+      <inertia ixx="2.75087e-05" ixy="-3.35241e-07" ixz="-5.7352e-06" iyy="4.33657e-05" iyz="-5.17847e-08" izz="3.45059e-05" />
     </inertial>
     <visual>
       <origin xyz="0.341094 0.068023 -0.431343" rpy="0 0 0" />
@@ -537,17 +615,23 @@
       <material name="silver" />
     </visual>
     <collision>
-      <origin xyz="0.341094 0.068023 -0.431343" rpy="0 0 0" />
+      <origin xyz="0.0077 0.0001 -0.0234" rpy="-1.5708 -5.19179e-17 -1.66533e-16" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint5_L_1.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_v1.stl" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="8.32667e-17 -0.000218214 0.000949706" rpy="-3.14159 -5.55112e-17 0" />
+      <geometry>
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/wrist_roll_follower_so101_v1.stl" />
       </geometry>
     </collision>
   </link>
   <link name="joint6_L_1">
     <inertial>
-      <origin xyz="0.035291018610448144 0.009625010503450424 0.0014078828166316781" rpy="0 0 0" />
-      <mass value="0.16178926125153403" />
-      <inertia ixx="3.9e-05" iyy="8.6e-05" izz="6e-05" ixy="-5e-06" iyz="-4e-06" ixz="2.2e-05" />
+      <origin xyz="-0.00157495 -0.0300244 0.0192755" rpy="0 0 0" />
+      <mass value="0.012" />
+      <inertia ixx="6.61427e-06" ixy="-3.19807e-07" ixz="-5.90717e-09" iyy="1.89032e-06" iyz="-1.09945e-07" izz="5.28738e-06" />
     </inertial>
     <visual>
       <origin xyz="0.332695 0.057196 -0.396739" rpy="0 0 0" />
@@ -557,9 +641,9 @@
       <material name="silver" />
     </visual>
     <collision>
-      <origin xyz="0.332695 0.057196 -0.396739" rpy="0 0 0" />
+      <origin xyz="-5.55112e-17 -5.55112e-17 0.0189" rpy="9.53145e-17 6.93889e-18 1.24077e-24" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint6_L_1.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/moving_jaw_so101_v1.stl" />
       </geometry>
     </collision>
   </link>
@@ -629,35 +713,53 @@
     <parent link="base_support_R_1" />
     <child link="board_mount_plate_R_1" />
   </joint>
-  <joint name="Revolute_23" type="fixed">
+  <joint name="Revolute_23" type="revolute">
     <origin xyz="0.044438 0.017268 0.0089" rpy="0 0 0" />
+    <axis xyz="-0.0 0.0 -1.0" />
     <parent link="base_support_R_1" />
     <child link="joint1_R_1" />
+    <limit effort="10" velocity="10" lower="-1.91986" upper="1.91986" />
+    <dynamics damping="0.5" friction="0.1" />
   </joint>
-  <joint name="Revolute_24" type="fixed">
+  <joint name="Revolute_24" type="revolute">
     <origin xyz="0.032911 -0.019478 -0.055376" rpy="0 0 0" />
+    <axis xyz="0.040768 -0.999169 -0.0" />
     <parent link="joint1_R_1" />
     <child link="joint2_R_1" />
+    <limit effort="10" velocity="10" lower="-1.74533" upper="1.74533" />
+    <dynamics damping="0.5" friction="0.1" />
   </joint>
-  <joint name="Revolute_25" type="fixed">
+  <joint name="Revolute_25" type="revolute">
     <origin xyz="0.089893 0.004777 -0.090864" rpy="0 0 0" />
+    <axis xyz="0.040768 -0.999169 -0.0" />
     <parent link="joint2_R_1" />
     <child link="joint3_R_1" />
+    <limit effort="10" velocity="10" lower="-1.69" upper="1.69" />
+    <dynamics damping="0.5" friction="0.1" />
   </joint>
-  <joint name="Revolute_26" type="fixed">
+  <joint name="Revolute_26" type="revolute">
     <origin xyz="0.102006 0.003837 -0.103859" rpy="0 0 0" />
+    <axis xyz="0.040768 -0.999169 -0.0" />
     <parent link="joint3_R_1" />
     <child link="joint4_R_1" />
+    <limit effort="10" velocity="10" lower="-1.65806" upper="1.65806" />
+    <dynamics damping="0.5" friction="0.1" />
   </joint>
-  <joint name="Revolute_27" type="fixed">
+  <joint name="Revolute_27" type="revolute">
     <origin xyz="0.050125 0.01784 -0.036048" rpy="0 0 0" />
+    <axis xyz="0.824037 0.033658 -0.565536" />
     <parent link="joint4_R_1" />
     <child link="joint5_R_1" />
+    <limit effort="10" velocity="10" lower="-2.74385" upper="2.84121" />
+    <dynamics damping="0.5" friction="0.1" />
   </joint>
-  <joint name="Revolute_28" type="fixed">
+  <joint name="Revolute_28" type="revolute">
     <origin xyz="0.008115 -0.01324 -0.033824" rpy="0 0 0" />
+    <axis xyz="-0.139959 -0.955199 -0.260782" />
     <parent link="joint5_R_1" />
     <child link="joint6_R_1" />
+    <limit effort="10" velocity="10" lower="-0.174533" upper="1.74533" />
+    <dynamics damping="0.5" friction="0.1" />
   </joint>
   <joint name="Rigid_29" type="fixed">
     <origin xyz="0.03 0.045 0.6" rpy="0 0 0" />
@@ -674,35 +776,53 @@
     <parent link="base_support_L_1" />
     <child link="board_mount_plate_L_1" />
   </joint>
-  <joint name="Revolute_32" type="fixed">
+  <joint name="Revolute_32" type="revolute">
     <origin xyz="0.044438 -0.017631 0.0089" rpy="0 0 0" />
+    <axis xyz="0.0 -0.0 -1.0" />
     <parent link="base_support_L_1" />
     <child link="joint1_L_1" />
+    <limit effort="10" velocity="10" lower="-1.91986" upper="1.91986" />
+    <dynamics damping="0.5" friction="0.1" />
   </joint>
-  <joint name="Revolute_33" type="fixed">
+  <joint name="Revolute_33" type="revolute">
     <origin xyz="0.03335 -0.018609 -0.055376" rpy="0 0 0" />
+    <axis xyz="0.064042 -0.997947 -0.0" />
     <parent link="joint1_L_1" />
     <child link="joint2_L_1" />
+    <limit effort="10" velocity="10" lower="-1.74533" upper="1.74533" />
+    <dynamics damping="0.5" friction="0.1" />
   </joint>
-  <joint name="Revolute_34" type="fixed">
+  <joint name="Revolute_34" type="revolute">
     <origin xyz="0.092599 0.007053 -0.087951" rpy="0 0 0" />
+    <axis xyz="0.064042 -0.997947 -0.0" />
     <parent link="joint2_L_1" />
     <child link="joint3_L_1" />
+    <limit effort="10" velocity="10" lower="-1.69" upper="1.69" />
+    <dynamics damping="0.5" friction="0.1" />
   </joint>
-  <joint name="Revolute_35" type="fixed">
+  <joint name="Revolute_35" type="revolute">
     <origin xyz="0.105215 0.006427 -0.100476" rpy="0 0 0" />
+    <axis xyz="0.064042 -0.997947 -0.0" />
     <parent link="joint3_L_1" />
     <child link="joint4_L_1" />
+    <limit effort="10" velocity="10" lower="-1.65806" upper="1.65806" />
+    <dynamics damping="0.5" friction="0.1" />
   </joint>
-  <joint name="Revolute_36" type="fixed">
+  <joint name="Revolute_36" type="revolute">
     <origin xyz="0.052062 0.019155 -0.032446" rpy="0 0 0" />
+    <axis xyz="0.860105 0.055233 -0.507119" />
     <parent link="joint4_L_1" />
     <child link="joint5_L_1" />
+    <limit effort="10" velocity="10" lower="-2.74385" upper="2.84121" />
+    <dynamics damping="0.5" friction="0.1" />
   </joint>
-  <joint name="Revolute_37" type="fixed">
+  <joint name="Revolute_37" type="revolute">
     <origin xyz="0.008399 0.010827 -0.034604" rpy="0 0 0" />
+    <axis xyz="-0.455444 -0.364616 -0.812173" />
     <parent link="joint5_L_1" />
     <child link="joint6_L_1" />
+    <limit effort="10" velocity="10" lower="-0.174533" upper="1.74533" />
+    <dynamics damping="0.5" friction="0.1" />
   </joint>
   <ros2_control name="GazeboSystem" type="system">
     <hardware>
@@ -714,6 +834,66 @@
       <state_interface name="velocity" />
     </joint>
     <joint name="Revolute_19">
+      <command_interface name="position" />
+      <state_interface name="position" />
+      <state_interface name="velocity" />
+    </joint>
+    <joint name="Revolute_23">
+      <command_interface name="position" />
+      <state_interface name="position" />
+      <state_interface name="velocity" />
+    </joint>
+    <joint name="Revolute_24">
+      <command_interface name="position" />
+      <state_interface name="position" />
+      <state_interface name="velocity" />
+    </joint>
+    <joint name="Revolute_25">
+      <command_interface name="position" />
+      <state_interface name="position" />
+      <state_interface name="velocity" />
+    </joint>
+    <joint name="Revolute_26">
+      <command_interface name="position" />
+      <state_interface name="position" />
+      <state_interface name="velocity" />
+    </joint>
+    <joint name="Revolute_27">
+      <command_interface name="position" />
+      <state_interface name="position" />
+      <state_interface name="velocity" />
+    </joint>
+    <joint name="Revolute_28">
+      <command_interface name="position" />
+      <state_interface name="position" />
+      <state_interface name="velocity" />
+    </joint>
+    <joint name="Revolute_32">
+      <command_interface name="position" />
+      <state_interface name="position" />
+      <state_interface name="velocity" />
+    </joint>
+    <joint name="Revolute_33">
+      <command_interface name="position" />
+      <state_interface name="position" />
+      <state_interface name="velocity" />
+    </joint>
+    <joint name="Revolute_34">
+      <command_interface name="position" />
+      <state_interface name="position" />
+      <state_interface name="velocity" />
+    </joint>
+    <joint name="Revolute_35">
+      <command_interface name="position" />
+      <state_interface name="position" />
+      <state_interface name="velocity" />
+    </joint>
+    <joint name="Revolute_36">
+      <command_interface name="position" />
+      <state_interface name="position" />
+      <state_interface name="velocity" />
+    </joint>
+    <joint name="Revolute_37">
       <command_interface name="position" />
       <state_interface name="position" />
       <state_interface name="velocity" />

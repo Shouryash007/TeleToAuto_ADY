@@ -242,14 +242,14 @@ export function createUi(handlers = {}) {
             <div class="teleop-heading">
                 <h2>Teleoperation Console</h2>
                 <p>
-                    Local arm tracking · Robot camera · Joint targets · IMU
+                    Dual-hand tracking · Jacobian / DLS inverse kinematics · Joint targets · IMU
                 </p>
             </div>
 
             <div class="teleop-grid">
 
                 <section class="teleop-card">
-                    <h3>1. Human Arm Tracking</h3>
+                    <h3>1. Dual-Hand Tracking (MediaPipe Hands)</h3>
                     <div class="teleop-status">
                         Tracking:
                         <span id="trackingStatus">NOT STARTED</span>
@@ -273,8 +273,7 @@ export function createUi(handlers = {}) {
                     </div>
 
                     <p class="teleop-note">
-                        This preview is processed locally in your browser.
-                        It is not transmitted to the robot.
+                        Both hands are tracked locally. Their 21-point landmarks drive the SO-101 inverse-kinematics solver.
                     </p>
                 </section>
 

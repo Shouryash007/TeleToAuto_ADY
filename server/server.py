@@ -166,6 +166,15 @@ async def manipulator_controller_js():
     return FileResponse(CLIENT_DIR / "manipulator-controller.js", media_type="application/javascript")
 
 
+@app.get("/dual-hand-ik-controller.js")
+async def dual_hand_ik_controller_js():
+    """Serve the browser-side dual-hand Jacobian/DLS inverse-kinematics module."""
+    return FileResponse(
+        CLIENT_DIR / "dual-hand-ik-controller.js",
+        media_type="application/javascript"
+    )
+
+
 @app.get("/digital-twin.js")
 async def digital_twin_js():
     return FileResponse(CLIENT_DIR / "digital-twin.js", media_type="application/javascript")

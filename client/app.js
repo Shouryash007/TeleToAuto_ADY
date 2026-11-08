@@ -3,7 +3,7 @@
 import { createUi } from "./ui-controller.js";
 import { createRobotConnection } from "./robot-connection.js";
 import { createHandTracker } from "./hand-tracker.js";
-import { createManipulatorController, CONTROL as MANIPULATOR_CONTROL } from "./manipulator-controller.js";
+import { createDualHandIKController } from "./dual-hand-ik-controller.js";
 import { createDigitalTwin } from "./digital-twin.js";
 
 const ui = createUi({
@@ -15,7 +15,7 @@ const ui = createUi({
     onDisconnectRobot: disconnectRobot
 });
 
-const manipulator = createManipulatorController();
+const manipulator = createDualHandIKController();
 let robot = null;
 let tracker = null;
 let trackingActive = false;
@@ -67,10 +67,9 @@ async function startTracking() {
     try {
         if (!tracker) {
             tracker = createHandTracker({
-                onPose: (landmarks) => {
-                    if (landmarks) manipulator.updateFromPose(landmarks);
-                    else manipulator.markStale();
-                },
+                // New dual-hand pipeline: MediaPipe Hands -> Jacobian/DLS IK.
+                // Pose landmarks are deliberately not used for joint calculation.
+                onPose: () => {},
                 onHands: (hands, handedness) => manipulator.updateFromHands(hands, handedness),
                 onStatus: setTrackingStatus,
                 onCameraLost: () => {
@@ -128,7 +127,7 @@ function channelReady(kind) {
 }
 
 function updateTransmission() {
-    const ready = channelReady("joint") && channelReady("imu");
+    const ready = channelReady("joint");
     if (ready && trackingActive) startTransmission();
     else if (!ready || !trackingActive) stopTransmission();
 }

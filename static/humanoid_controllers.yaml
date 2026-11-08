@@ -2,12 +2,22 @@ controller_manager:
   ros__parameters:
     update_rate: 100
     use_sim_time: true
+
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
+
     camera_yaw_position_controller:
       type: position_controllers/JointGroupPositionController
+
     camera_pitch_position_controller:
       type: position_controllers/JointGroupPositionController
+
+    right_arm_position_controller:
+      type: position_controllers/JointGroupPositionController
+
+    left_arm_position_controller:
+      type: position_controllers/JointGroupPositionController
+
 
 camera_yaw_position_controller:
   ros__parameters:
@@ -15,8 +25,33 @@ camera_yaw_position_controller:
       - Revolute_18
     interface_name: position
 
+
 camera_pitch_position_controller:
   ros__parameters:
     joints:
       - Revolute_19
+    interface_name: position
+
+
+right_arm_position_controller:
+  ros__parameters:
+    joints:
+      - Revolute_23
+      - Revolute_24
+      - Revolute_25
+      - Revolute_26
+      - Revolute_27
+      - Revolute_28
+    interface_name: position
+
+
+left_arm_position_controller:
+  ros__parameters:
+    joints:
+      - Revolute_32
+      - Revolute_33
+      - Revolute_34
+      - Revolute_35
+      - Revolute_36
+      - Revolute_37
     interface_name: position

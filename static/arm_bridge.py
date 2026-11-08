@@ -1,0 +1,262 @@
+#!/usr/bin/env python3
+"""
+UDP -> ROS 2 bridge for humanoid arm control in Gazebo Classic.
+
+Receives joint_targets on UDP port 8768 and publishes
+left and right arm commands.
+
+Phone orientation is handled separately by gyro_to_gazebo.py.
+"""
+
+import json
+import math
+import socket
+import time
+
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import Float64MultiArray
+
+
+ARM_KEYS = (
+    "shoulder_pan",
+    "shoulder_lift",
+    "elbow_flex",
+    "wrist_flex",
+    "wrist_roll",
+)
+
+
+def finite(value):
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    return value if math.isfinite(value) else None
+
+
+class HumanoidArmBridge(Node):
+
+    def __init__(self):
+        super().__init__("humanoid_arm_bridge")
+
+        self.declare_parameter("joint_udp_host", "127.0.0.1")
+        self.declare_parameter("joint_udp_port", 8768)
+        self.declare_parameter("packet_timeout_sec", 1.0)
+
+        self.declare_parameter(
+            "right_arm_topic",
+            "/right_arm_position_controller/commands",
+        )
+        self.declare_parameter(
+            "left_arm_topic",
+            "/left_arm_position_controller/commands",
+        )
+
+        self.declare_parameter("gripper_open_rad", 0.0)
+        self.declare_parameter("gripper_closed_rad", 0.7)
+
+        self.right_pub = self.create_publisher(
+            Float64MultiArray,
+            self.get_parameter("right_arm_topic").value,
+            10,
+        )
+
+        self.left_pub = self.create_publisher(
+            Float64MultiArray,
+            self.get_parameter("left_arm_topic").value,
+            10,
+        )
+
+        self.host = str(self.get_parameter("joint_udp_host").value)
+        self.port = int(self.get_parameter("joint_udp_port").value)
+
+        self.sock = socket.socket(
+            socket.AF_INET,
+            socket.SOCK_DGRAM,
+        )
+        self.sock.setsockopt(
+            socket.SOL_SOCKET,
+            socket.SO_REUSEADDR,
+            1,
+        )
+        self.sock.bind((self.host, self.port))
+        self.sock.setblocking(False)
+
+        self.packet_timeout = float(
+            self.get_parameter("packet_timeout_sec").value
+        )
+
+        self.joint_count = 0
+        self.last_log = time.monotonic()
+
+        self.timer = self.create_timer(0.005, self.poll_udp)
+
+        self.get_logger().info(
+            f"Arm bridge listening on {self.host}:{self.port}"
+        )
+        self.get_logger().info(
+            "Publishing left and right arm commands only."
+        )
+
+    def _fresh(self, packet):
+        received = finite(packet.get("received_at"))
+
+        if received is None:
+            return False
+
+        age = time.time() - received
+
+        return -0.25 <= age <= self.packet_timeout
+
+    def poll_udp(self):
+        latest_packet = None
+
+        while True:
+            try:
+                raw, _address = self.sock.recvfrom(65535)
+
+            except BlockingIOError:
+                break
+
+            except OSError as error:
+                self.get_logger().error(str(error))
+                break
+
+            try:
+                latest_packet = json.loads(raw.decode("utf-8"))
+
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                latest_packet = None
+
+        if latest_packet is not None:
+            self.handle_joint_packet(latest_packet)
+
+    def handle_joint_packet(self, packet):
+
+        if not isinstance(packet, dict):
+            return
+
+        if packet.get("type") != "joint_targets":
+            return
+
+        if packet.get("units") != "deg" or not self._fresh(packet):
+            self.get_logger().warning(
+                "Dropped stale joint packet or unexpected units"
+            )
+            return
+
+        arms = packet.get("arms")
+        gripper = packet.get("gripper")
+
+        if not isinstance(arms, dict) or not isinstance(gripper, dict):
+            self.get_logger().warning(
+                "Dropped joint packet: arms/gripper missing"
+            )
+            return
+
+        output = {}
+
+        for side in ("left", "right"):
+
+            values = arms.get(side)
+
+            if not isinstance(values, dict):
+                return
+
+            radians = []
+
+            for name in ARM_KEYS:
+
+                degrees = finite(values.get(name))
+
+                if degrees is None or abs(degrees) > 180.0:
+                    self.get_logger().warning(
+                        f"Dropped invalid {side}.{name}"
+                    )
+                    return
+
+                radians.append(math.radians(degrees))
+
+            closed = gripper.get(f"{side}_closed")
+
+            if not isinstance(closed, bool):
+                self.get_logger().warning(
+                    f"Dropped invalid {side} gripper state"
+                )
+                return
+
+            grip_value = (
+                float(
+                    self.get_parameter("gripper_closed_rad").value
+                )
+                if closed
+                else float(
+                    self.get_parameter("gripper_open_rad").value
+                )
+            )
+
+            if not math.isfinite(grip_value):
+                return
+
+            # Sixth controller value is the gripper command.
+            radians.append(grip_value)
+
+            output[side] = radians
+
+        self.publish(self.left_pub, output["left"])
+        self.publish(self.right_pub, output["right"])
+
+        self.joint_count += 1
+        self.periodic_log()
+
+    @staticmethod
+    def publish(publisher, values):
+        message = Float64MultiArray()
+        message.data = [float(value) for value in values]
+        publisher.publish(message)
+
+    def periodic_log(self):
+
+        now = time.monotonic()
+
+        if now - self.last_log >= 1.0:
+
+            self.get_logger().info(
+                f"Forwarded arm joint packets={self.joint_count} "
+                f"(UDP {self.port})"
+            )
+
+            self.joint_count = 0
+            self.last_log = now
+
+    def destroy_node(self):
+
+        try:
+            self.sock.close()
+        except OSError:
+            pass
+
+        super().destroy_node()
+
+
+def main(args=None):
+
+    rclpy.init(args=args)
+
+    node = HumanoidArmBridge()
+
+    try:
+        rclpy.spin(node)
+
+    except KeyboardInterrupt:
+        pass
+
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()

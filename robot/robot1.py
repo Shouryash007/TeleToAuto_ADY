@@ -3,7 +3,7 @@
 
 The physical follower is deliberately disabled. Browser-computed joint targets
 and ESP32 head orientation are received over WebRTC DataChannels, validated,
-and sent to a local ROS 2/Gazebo UDP bridge. Video is sent from CAMERA_DEVICE
+and sent to a local ROS 2/Gazebo UDP bridge on separate arm and gyro ports. Video is sent from CAMERA_DEVICE
 when a camera is available.
 """
 import asyncio
@@ -43,12 +43,21 @@ ENABLE_PHYSICAL_CAMERA = (
 # Safety invariant: never enable the physical SO-101 follower from this file.
 FOLLOWER_ENABLED = False
 SIMULATION_ENABLED = os.getenv("SIMULATION_ENABLED", "true").lower() in {"1", "true", "yes"}
-SIMULATION_IPC_ADDRESS = (
-    os.getenv("SIMULATION_IPC_HOST", "127.0.0.1"),
-    int(os.getenv("SIMULATION_IPC_PORT", "8766")),
+SIMULATION_IPC_HOST = os.getenv("SIMULATION_IPC_HOST", "127.0.0.1")
+JOINT_IPC_ADDRESS = (
+    SIMULATION_IPC_HOST,
+    int(os.getenv("JOINT_IPC_PORT", "8768")),
+)
+GYRO_IPC_ADDRESS = (
+    SIMULATION_IPC_HOST,
+    int(os.getenv("GYRO_IPC_PORT", "8769")),
 )
 COMMAND_TIMEOUT_SECONDS = float(os.getenv("COMMAND_TIMEOUT_SECONDS", "0.5"))
 MAX_ABS_JOINT_DEG = float(os.getenv("MAX_ABS_JOINT_DEG", "180"))
+# ROS 2 position controllers consume radians. Keep the WebRTC/browser protocol
+# in degrees, then attach an explicit radian representation for the local bridge.
+GRIPPER_CLOSED_RAD = float(os.getenv("GRIPPER_CLOSED_RAD", "0.0"))
+GRIPPER_OPEN_RAD = float(os.getenv("GRIPPER_OPEN_RAD", "1.2"))
 
 simulation_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -73,15 +82,58 @@ def finite_number(value):
 
 
 def send_to_gazebo(payload):
-    """Send a validated command to the ROS 2 bridge on localhost UDP."""
+    """Send validated targets to the local ROS 2/Gazebo UDP bridge.
+
+    Browser joint targets remain in degrees for compatibility. For joint_targets,
+    also include radians in ``arms_rad`` and gripper positions in ``gripper_rad``;
+    ROS 2 position controllers should consume those radian fields.
+    """
     if not SIMULATION_ENABLED:
         print("[SAFETY] Simulation output disabled; command not applied")
         return False
     try:
-        payload["received_at"] = time.time()
+        outgoing = dict(payload)
+        if outgoing.get("type") == "joint_targets":
+            arms = outgoing.get("arms", {})
+            outgoing["arms_rad"] = {
+                side: {
+                    name: math.radians(float(value))
+                    for name, value in arms[side].items()
+                }
+                for side in ("left", "right")
+            }
+            gripper = outgoing.get("gripper", {})
+            outgoing["gripper_rad"] = {
+                side: (
+                    GRIPPER_CLOSED_RAD
+                    if bool(gripper.get(f"{side}_closed", False))
+                    else GRIPPER_OPEN_RAD
+                )
+                for side in ("left", "right")
+            }
+            outgoing["joint_units_rad"] = "rad"
+            outgoing["gripper_units_rad"] = "rad"
+
+        outgoing["received_at"] = time.time()
+
+        # Keep arm and phone-orientation traffic on separate UDP ports.
+        packet_type = outgoing.get("type")
+        if packet_type == "joint_targets":
+            destination = JOINT_IPC_ADDRESS
+        elif packet_type in ("head_orientation", "head_gyro"):
+            destination = GYRO_IPC_ADDRESS
+        else:
+            print("[SIM UDP] Unsupported packet type:", packet_type, flush=True)
+            return False
+
         simulation_socket.sendto(
-            json.dumps(payload, separators=(",", ":")).encode("utf-8"),
-            SIMULATION_IPC_ADDRESS,
+            json.dumps(outgoing, separators=(",", ":")).encode("utf-8"),
+            destination,
+        )
+        print(
+            f"[SIM UDP] Sent {packet_type} to "
+            f"{destination[0]}:{destination[1]}",
+            flush=True,
         )
         return True
     except Exception as exc:
@@ -248,6 +300,9 @@ def validate_joint_targets(data):
                 return None
             normalized[side][name] = number
     gripper = data.get("gripper", {})
+    if not isinstance(gripper, dict):
+        print("[SAFETY] Rejecting invalid gripper payload")
+        return None
     # Frontend currently sends boolean left_closed/right_closed.
     normalized_gripper = {
         "left_closed": bool(gripper.get("left_closed", False)),
