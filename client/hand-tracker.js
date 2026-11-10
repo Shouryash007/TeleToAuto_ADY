@@ -99,6 +99,47 @@ const HAND_CONNECTIONS = [
     [0, 17]
 ];
 
+// MediaPipe can report a second "ghost" detection on the same hand (usually with
+// the opposite Left/Right label) when only one hand is visible. If two detections
+// overlap heavily, keep only the one with the higher handedness score.
+function palmCenter(hand) {
+    const ids = [0, 5, 9, 13, 17];
+    return {
+        x: ids.reduce((s, i) => s + hand[i].x, 0) / ids.length,
+        y: ids.reduce((s, i) => s + hand[i].y, 0) / ids.length
+    };
+}
+
+function removeDuplicateHands(hands, handedness) {
+    const keep = hands.map(() => true);
+
+    for (let i = 0; i < hands.length; i++) {
+        for (let j = i + 1; j < hands.length; j++) {
+            if (!keep[i] || !keep[j]) continue;
+
+            const a = palmCenter(hands[i]);
+            const b = palmCenter(hands[j]);
+            const size = Math.max(
+                Math.hypot(hands[i][0].x - hands[i][9].x, hands[i][0].y - hands[i][9].y),
+                Math.hypot(hands[j][0].x - hands[j][9].x, hands[j][0].y - hands[j][9].y),
+                1e-4
+            );
+
+            // Two real hands are never closer than about one palm-length apart.
+            if (Math.hypot(a.x - b.x, a.y - b.y) < size * 0.8) {
+                const si = handedness[i]?.score ?? 0;
+                const sj = handedness[j]?.score ?? 0;
+                keep[si >= sj ? j : i] = false;
+            }
+        }
+    }
+
+    return {
+        hands: hands.filter((_, i) => keep[i]),
+        handedness: handedness.filter((_, i) => keep[i])
+    };
+}
+
 export function createHandTracker({
     onHands,
     onStatus,
@@ -126,8 +167,8 @@ export function createHandTracker({
         handsModel.setOptions({
             maxNumHands: 2,
             modelComplexity: 1,
-            minDetectionConfidence: 0.55,
-            minTrackingConfidence: 0.55
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.6
         });
 
         handsModel.onResults(handleResults);
@@ -138,8 +179,10 @@ export function createHandTracker({
 
         if (!active) return;
 
-        const hands = results.multiHandLandmarks || [];
-        const handedness = results.multiHandedness || [];
+        const { hands, handedness } = removeDuplicateHands(
+            results.multiHandLandmarks || [],
+            results.multiHandedness || []
+        );
 
         // Send detected landmarks to the dual-hand IK controller.
         onHands?.(hands, handedness);

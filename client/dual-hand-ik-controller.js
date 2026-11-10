@@ -1,27 +1,61 @@
 // Browser-side dual SO-101 hand teleoperation.
-// Port of dual_hand_ik_teleop.py: MediaPipe hand features -> DLS/Jacobian IK.
+// MediaPipe hand features -> DLS/Jacobian IK.
+//
+// The IK now uses the SAME kinematic chains as static/urdf/humanoid_gazebo.urdf
+// (Revolute_23..27 right arm, Revolute_32..36 left arm): the real joint origins
+// and joint axes of the simulated, upside-down-mounted arms. Joint angles that
+// come out of the solver are therefore exactly the angles the Gazebo position
+// controllers need, so no sign/offset hacks are required.
+//
+// All frames in the URDF arm chains have rpy = 0, so the arm base frame is
+// axis-aligned with the robot frame: +X forward, +Y left, +Z up.
 // Output is compatible with the existing robot-connection.js joint_targets packet.
 
 const JOINTS = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll"];
 const DEG = 180 / Math.PI;
 
-const DEFAULT_CHAIN = [
-  ["shoulder_pan", [0.0388353, -8.97657e-9, 0.0624], [Math.PI, 0, -Math.PI], [-1.91986, 1.91986]],
-  ["shoulder_lift", [-0.0303992, -0.0182778, -0.0542], [-Math.PI/2, -Math.PI/2, 0], [-1.74533, 1.74533]],
-  ["elbow_flex", [-0.11257, -0.028, 0], [0, 0, Math.PI/2], [-1.69, 1.69]],
-  ["wrist_flex", [-0.1349, 0.0052, 0], [0, 0, -Math.PI/2], [-1.65806, 1.65806]],
-  ["wrist_roll", [0, -0.0611, 0.0181], [Math.PI/2, 0.0486795, Math.PI], [-2.74385, 2.84121]],
-  ["gripper_frame_joint", [-0.0079, -0.000218121, -0.0981274], [0, Math.PI, 0], null, "fixed"]
-];
+// [origin xyz in parent frame, axis in parent frame, [lower, upper]] copied from the URDF.
+const ARM_CHAINS = {
+  right: {
+    joints: [
+      [[0.044438, 0.017268, 0.0089],   [0, 0, -1],                         [-1.91986, 1.91986]],   // Revolute_23
+      [[0.032911, -0.019478, -0.055376], [0.040768, -0.999169, 0],         [-1.74533, 1.74533]],   // Revolute_24
+      [[0.089893, 0.004777, -0.090864],  [0.040768, -0.999169, 0],         [-1.69, 1.69]],         // Revolute_25
+      [[0.102006, 0.003837, -0.103859],  [0.040768, -0.999169, 0],         [-1.65806, 1.65806]],   // Revolute_26
+      [[0.050125, 0.01784, -0.036048],   [0.824037, 0.033658, -0.565536],  [-2.74385, 2.84121]]    // Revolute_27
+    ],
+    tip: [0.008115, -0.01324, -0.033824]                                     // Revolute_28 (gripper) origin
+  },
+  left: {
+    joints: [
+      [[0.044438, -0.017631, 0.0089],  [0, 0, -1],                         [-1.91986, 1.91986]],   // Revolute_32
+      [[0.03335, -0.018609, -0.055376],  [0.064042, -0.997947, 0],         [-1.74533, 1.74533]],   // Revolute_33
+      [[0.092599, 0.007053, -0.087951],  [0.064042, -0.997947, 0],         [-1.69, 1.69]],         // Revolute_34
+      [[0.105215, 0.006427, -0.100476],  [0.064042, -0.997947, 0],         [-1.65806, 1.65806]],   // Revolute_35
+      [[0.052062, 0.019155, -0.032446],  [0.860105, 0.055233, -0.507119],  [-2.74385, 2.84121]]    // Revolute_36
+    ],
+    tip: [0.008399, 0.010827, -0.034604]                                     // Revolute_37 (gripper) origin
+  }
+};
 
 const CFG = {
-  home: [0.24, 0, 0.22], homePitch: 0.35,
-  range: [0.06, 0.12, 0.06], handSpanX: 0.22, handSpanY: 0.20,
-  depthSpan: 0.35, depthSign: 1, lateralSign: 1, rollGain: 1,
-  pitchWeight: 0.3, damping: 0.05, iterations: 25, maxJointSpeed: 2.5,
-  smoothing: 0.35, lostHoldMs: 500, pinchClosed: 0.25, pinchOpen: 0.95,
+  // Neutral gripper position, measured from the shoulder-pan joint origin (robot frame:
+  // +X forward, +Y left, +Z up), and the neutral tool pitch (sum of lift+elbow+wrist_flex, rad).
+  // Home / range were chosen by measuring this arm's reachable workspace: with the tool
+  // pitch left free (pitchWeight 0) the arm can reach about +-0.11 m forward/back,
+  // +-0.25 m sideways and +-0.11 m up/down around this home pose.
+  home: [0.28, 0.012, -0.24], homePitch: 0.4,
+  range: [0.09, 0.20, 0.09], handSpanX: 0.22, handSpanY: 0.20,
+  depthSpan: 0.35, depthSign: 1, lateralSign: 1, rollGain: 1, rollSign: 1,
+  pitchWeight: 0, nullGain: 0.05, damping: 0.05, iterations: 25, maxJointSpeed: 3.0,
+  // Input filtering. Lower smoothing = smoother but laggier.
+  smoothing: 0.25, deadband: 0.004, lostHoldMs: 500,
+  pinchClosed: 0.25, pinchOpen: 0.95,
   gripperOpen: 1.2, gripperClosed: 0, staleMs: 500,
-  swapHands: false
+  // MediaPipe assumes a mirrored (selfie) image. The tracker feeds the raw, un-mirrored
+  // webcam frame, so MediaPipe's "Left" label is the operator's RIGHT hand. Swapping makes the
+  // operator's right hand drive the robot's right arm. Set false if your arms appear crossed.
+  swapHands: true
 };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -29,27 +63,22 @@ const norm = v => Math.hypot(...v);
 const sub = (a,b) => a.map((v,i)=>v-b[i]);
 const cross = (a,b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
 const dot = (a,b) => a.reduce((s,v,i)=>s+v*b[i],0);
-const wrap = a => (a + Math.PI) % (2*Math.PI) - Math.PI;
+// Proper wrap to [-PI, PI). (JS % keeps the sign of the dividend, so the old
+// "(a+PI)%(2PI)-PI" version did not wrap values below -PI; that let the wrist
+// roll reference drift by 2*PI and made the joint spin.)
+const TWO_PI = 2*Math.PI;
+const wrap = a => ((a + Math.PI) % TWO_PI + TWO_PI) % TWO_PI - Math.PI;
 
-function matMul(A,B) {
-  const C=Array.from({length:4},()=>[0,0,0,0]);
-  for(let i=0;i<4;i++) for(let j=0;j<4;j++) for(let k=0;k<4;k++) C[i][j]+=A[i][k]*B[k][j];
-  return C;
+function matVec(R,v){return [dot(R[0],v),dot(R[1],v),dot(R[2],v)];}
+function matMul3(A,B){
+  return A.map((row,i)=>[0,1,2].map(j=>row[0]*B[0][j]+row[1]*B[1][j]+row[2]*B[2][j]));
 }
-function rpyMatrix(r,p,y) {
-  const cr=Math.cos(r),sr=Math.sin(r),cp=Math.cos(p),sp=Math.sin(p),cy=Math.cos(y),sy=Math.sin(y);
-  return [[cy*cp,cy*sp*sr-sy*cr,cy*sp*cr+sy*sr],
-          [sy*cp,sy*sp*sr+cy*cr,sy*sp*cr-cy*sr],[-sp,cp*sr,cp*cr]];
-}
-function transform(xyz,rpy) {
-  const R=rpyMatrix(...rpy);
-  return [[R[0][0],R[0][1],R[0][2],xyz[0]],
-          [R[1][0],R[1][1],R[1][2],xyz[1]],
-          [R[2][0],R[2][1],R[2][2],xyz[2]],[0,0,0,1]];
-}
-function rotZ(q) {
-  const c=Math.cos(q),s=Math.sin(q);
-  return [[c,-s,0,0],[s,c,0,0],[0,0,1,0],[0,0,0,1]];
+// Rodrigues rotation about a unit axis.
+function axisAngle(a,q){
+  const c=Math.cos(q), s=Math.sin(q), t=1-c, [x,y,z]=a;
+  return [[t*x*x+c,   t*x*y-s*z, t*x*z+s*y],
+          [t*x*y+s*z, t*y*y+c,   t*y*z-s*x],
+          [t*x*z-s*y, t*y*z+s*x, t*z*z+c]];
 }
 function solveLinear(A,b) { // Gaussian elimination with partial pivoting
   const n=b.length, M=A.map((row,i)=>[...row,b[i]]);
@@ -63,36 +92,42 @@ function solveLinear(A,b) { // Gaussian elimination with partial pivoting
   }
   return M.map(row=>row[n]);
 }
-class SO101Kinematics {
-  constructor(){
-    this.lower=DEFAULT_CHAIN.slice(0,5).map(c=>c[3][0]);
-    this.upper=DEFAULT_CHAIN.slice(0,5).map(c=>c[3][1]);
-    this.fixed=DEFAULT_CHAIN.map(c=>transform(c[1],c[2]));
+
+class ArmKinematics {
+  constructor(chain){
+    this.origins=chain.joints.map(j=>j[0]);
+    this.axes=chain.joints.map(j=>{const n=norm(j[1]);return j[1].map(v=>v/n);});
+    this.lower=chain.joints.map(j=>j[2][0]);
+    this.upper=chain.joints.map(j=>j[2][1]);
+    this.tip=chain.tip;
+    // lift, elbow and wrist_flex share one axis, so tool pitch is the sum of those angles.
     this.pitchSigns=[0,1,1,1,0];
+    this.targetPitch=CFG.homePitch;
   }
   fkFull(q){
-    let T=[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]], axes=[],origins=[],k=0;
-    for(let i=0;i<DEFAULT_CHAIN.length;i++){
-      T=matMul(T,this.fixed[i]);
-      if(i<5){
-        axes.push([T[0][2],T[1][2],T[2][2]]);
-        origins.push([T[0][3],T[1][3],T[2][3]]);
-        T=matMul(T,rotZ(q[k++]));
-      }
+    let R=[[1,0,0],[0,1,0],[0,0,1]], p=[0,0,0];
+    const axes=[], origins=[];
+    for(let i=0;i<5;i++){
+      const o=matVec(R,this.origins[i]);
+      p=[p[0]+o[0],p[1]+o[1],p[2]+o[2]];
+      axes.push(matVec(R,this.axes[i]));
+      origins.push(p.slice());
+      R=matMul3(R,axisAngle(this.axes[i],q[i]));
     }
-    return {p:[T[0][3],T[1][3],T[2][3]],axes,origins};
+    const t=matVec(R,this.tip);
+    return {p:[p[0]+t[0],p[1]+t[1],p[2]+t[2]],axes,origins};
   }
   jacobian(q){
     const {p,axes,origins}=this.fkFull(q);
     return axes.map((a,i)=>cross(a,sub(p,origins[i]))); // columns represented as vectors
   }
   pitch(q){return dot(this.pitchSigns,q);}
-  solve(q0,target,roll,neutral){
+  solve(q0,target,roll,qNeutral=null){
     const q=q0.slice(), idx=[0,1,2,3];
     for(let iter=0;iter<CFG.iterations;iter++){
       const {p}=this.fkFull(q), e=sub(target,p), err=norm(e);
       const Jcols=this.jacobian(q);
-      const pitchErr=(this.targetPitch ?? CFG.homePitch)-this.pitch(q);
+      const pitchErr=this.targetPitch-this.pitch(q);
       const rows=3+(CFG.pitchWeight>0?1:0);
       const J=Array.from({length:rows},(_,r)=>idx.map(i=>r<3?Jcols[i][r]:CFG.pitchWeight*this.pitchSigns[i]));
       const ev=[...e,...(rows===4?[CFG.pitchWeight*pitchErr]:[])];
@@ -101,12 +136,36 @@ class SO101Kinematics {
         return s+(r===c?CFG.damping**2:0);
       }));
       const y=solveLinear(A,ev);
-      const dq=idx.map((_,k)=>{let s=0;for(let r=0;r<rows;r++)s+=J[r][k]*y[r];return s;});
+      let dq=idx.map((_,k)=>{let s=0;for(let r=0;r<rows;r++)s+=J[r][k]*y[r];return s;});
+      if(qNeutral && CFG.nullGain>0 && rows<idx.length){
+        // Null-space pull toward the neutral posture: keeps the redundant joint
+        // (wrist_flex) from drifting while the gripper position is tracked.
+        const v=idx.map(k=>CFG.nullGain*(qNeutral[k]-q[k]));
+        const Jv=J.map(row=>row.reduce((s,x,k)=>s+x*v[k],0));
+        const z=solveLinear(A,Jv);
+        dq=dq.map((d,k)=>d+v[k]-J.reduce((s,row,r)=>s+row[k]*z[r],0));
+      }
       const m=Math.max(...dq.map(Math.abs));
       const scale=m>0.25?0.25/m:1;
       idx.forEach((joint,k)=>q[joint]=clamp(q[joint]+dq[k]*scale,this.lower[joint],this.upper[joint]));
       q[4]=clamp(roll,this.lower[4],this.upper[4]);
       if(err<0.0005 && Math.abs(pitchErr)<0.02) break;
+    }
+    return q;
+  }
+  // Find the neutral joint configuration for the configured home pose.
+  homeConfiguration(){
+    const q=[0,0.3,0.3,0,0], target=CFG.home.slice();
+    this.targetPitch=CFG.homePitch;
+    for(let n=0;n<400;n++){
+      const {p}=this.fkFull(q), e=sub(target,p), Jcols=this.jacobian(q);
+      const pitchErr=CFG.homePitch-this.pitch(q);
+      const J=Array.from({length:4},(_,r)=>[0,1,2,3].map(i=>r<3?Jcols[i][r]:this.pitchSigns[i]));
+      const ev=[...e,pitchErr];
+      const A=Array.from({length:4},(_,r)=>Array.from({length:4},(_,c)=>J[r].reduce((s,v,k)=>s+v*J[c][k],0)+(r===c?0.05**2:0)));
+      const y=solveLinear(A,ev), dq=[0,1,2,3].map(k=>J.reduce((s,row,r)=>s+row[k]*y[r],0));
+      const m=Math.max(...dq.map(Math.abs)), scale=m>0.25?0.25/m:1;
+      [0,1,2,3].forEach(k=>q[k]=clamp(q[k]+dq[k]*scale,this.lower[k],this.upper[k]));
     }
     return q;
   }
@@ -123,36 +182,21 @@ function features(hand){
   const vx=hand[5].x-hand[17].x, vy=hand[5].y-hand[17].y;
   return {cx,cy,size,roll:Math.atan2(vy,vx),pinch:d(4,8)/size};
 }
-function gaussianHome(kin){
-  let q=[0,-1,0.6,0.8,0], target=CFG.home.slice();
-  // Find a practical starting configuration by the same DLS iteration.
-  for(let n=0;n<400;n++){
-    const {p}=kin.fkFull(q), e=sub(target,p), Jcols=kin.jacobian(q);
-    const pitchErr=CFG.homePitch-kin.pitch(q);
-    const rows=4, J=Array.from({length:4},(_,r)=>[0,1,2,3].map(i=>r<3?Jcols[i][r]:kin.pitchSigns[i]));
-    const ev=[...e,pitchErr], A=Array.from({length:4},(_,r)=>Array.from({length:4},(_,c)=>J[r].reduce((s,v,k)=>s+v*J[c][k],0)+(r===c?0.05**2:0)));
-    const y=solveLinear(A,ev), dq=[0,1,2,3].map(k=>J.reduce((s,row,r)=>s+row[k]*y[r],0));
-    const m=Math.max(...dq.map(Math.abs)), scale=m>0.25?0.25/m:1;
-    [0,1,2,3].forEach(k=>q[k]=clamp(q[k]+dq[k]*scale,kin.lower[k],kin.upper[k]));
-  }
-  return q;
-}
 
 export function createDualHandIKController(options={}) {
   Object.assign(CFG,options);
-  const kin=new SO101Kinematics();
-  const qHome=gaussianHome(kin);
-  kin.targetPitch=kin.pitch(qHome);
-  const states={
-    left:{q:qHome.slice(),refs:null,smoothed:null,lastSeen:0,target:CFG.home.slice(),roll:0,grip:CFG.gripperOpen},
-    right:{q:qHome.slice(),refs:null,smoothed:null,lastSeen:0,target:CFG.home.slice(),roll:0,grip:CFG.gripperOpen}
-  };
+  const kins={left:new ArmKinematics(ARM_CHAINS.left),right:new ArmKinematics(ARM_CHAINS.right)};
+  const qHomes={left:kins.left.homeConfiguration(),right:kins.right.homeConfiguration()};
+  for(const side of ["left","right"]) kins[side].targetPitch=kins[side].pitch(qHomes[side]);
+  const mkState=side=>({q:qHomes[side].slice(),refs:null,smoothed:null,lastSeen:0,
+    target:CFG.home.slice(),roll:0,grip:CFG.gripperOpen,closed:false});
+  const states={left:mkState("left"),right:mkState("right")};
   let lastUpdate=0, lastTime=performance.now();
+  const gripPercent=s=>clamp((CFG.gripperOpen-s.grip)/(CFG.gripperOpen-CFG.gripperClosed)*100,0,100);
   const output=()=>Object.fromEntries(["left","right"].map(side=>{
     const s=states[side], a={};
     JOINTS.forEach((n,i)=>a[n]=s.q[i]*DEG);
-    // Existing wire protocol represents gripper as a closed boolean.
-    a.gripper=clamp((CFG.gripperOpen-s.grip)/(CFG.gripperOpen-CFG.gripperClosed)*100,0,100);
+    a.gripper=gripPercent(s);
     return [side,a];
   }));
   function updateFromHands(hands,handedness){
@@ -168,22 +212,33 @@ export function createDualHandIKController(options={}) {
       if(!s.refs){s.refs={...f};s.smoothed={...f};}
       const a=CFG.smoothing;
       for(const key of ["cx","cy","size","pinch"]) s.smoothed[key]=(1-a)*s.smoothed[key]+a*f[key];
-      s.smoothed.roll=(1-a)*s.smoothed.roll+a*(s.smoothed.roll+wrap(f.roll-s.smoothed.roll));
+      // Angular smoothing on the shortest path, kept wrapped so it can never drift by 2*PI.
+      s.smoothed.roll=wrap(s.smoothed.roll+a*wrap(f.roll-s.smoothed.roll));
       const cx=s.smoothed.cx,cy=s.smoothed.cy,size=s.smoothed.size;
-      const ux=clamp((cx-s.refs.cx)/CFG.handSpanX,-1,1)*CFG.lateralSign;
-      const uz=clamp(-(cy-s.refs.cy)/CFG.handSpanY,-1,1);
+      // Small dead-band so camera/landmark jitter around the reference does not move the arm.
+      const db=v=>Math.abs(v)<CFG.deadband?0:v;
+      const ux=clamp(db(cx-s.refs.cx)/CFG.handSpanX,-1,1)*CFG.lateralSign;
+      const uz=clamp(-db(cy-s.refs.cy)/CFG.handSpanY,-1,1);
       const ud=clamp((size/s.refs.size-1)/CFG.depthSpan,-1,1)*CFG.depthSign;
-      s.target=[CFG.home[0]+ud*CFG.range[0],CFG.home[1]-ux*CFG.range[1],CFG.home[2]+uz*CFG.range[2]];
-      s.roll=clamp(CFG.rollGain*wrap(s.smoothed.roll-s.refs.roll),kin.lower[4],kin.upper[4]);
+      // Robot frame: +X forward, +Y left, +Z up. The raw (un-mirrored) camera image has the
+      // operator's right hand at smaller cx, so +ux (larger cx) maps to +Y (left) on the robot.
+      // The reachable volume is ellipsoidal, not a box: limit the combined hand offset to the
+      // unit ball so diagonal hand moves (e.g. far + up + sideways) stay reachable.
+      let off=[ud,ux,uz]; const len=Math.hypot(...off); if(len>1) off=off.map(v=>v/len);
+      s.target=[CFG.home[0]+off[0]*CFG.range[0],CFG.home[1]+off[1]*CFG.range[1],CFG.home[2]+off[2]*CFG.range[2]];
+      const kin=kins[side];
+      s.roll=clamp(CFG.rollSign*CFG.rollGain*wrap(s.smoothed.roll-s.refs.roll),kin.lower[4],kin.upper[4]);
       const t=clamp((s.smoothed.pinch-CFG.pinchClosed)/(CFG.pinchOpen-CFG.pinchClosed),0,1);
       s.grip=CFG.gripperClosed+t*(CFG.gripperOpen-CFG.gripperClosed);
+      // Hysteresis so the gripper does not chatter around the threshold.
+      if(!s.closed && t<0.35) s.closed=true; else if(s.closed && t>0.65) s.closed=false;
     }
     for(const side of ["left","right"]){
-      const s=states[side];
+      const s=states[side], kin=kins[side];
       if(s.lastSeen && now-s.lastSeen<=CFG.lostHoldMs){
-        const qIk=kin.solve(s.q,s.target,s.roll,qHome);
+        const qIk=kin.solve(s.q,s.target,s.roll,qHomes[side]);
         const maxStep=CFG.maxJointSpeed*dt;
-        s.q=s.q.map((v,i)=>clamp(v+clamp(qIk[i]-v,-maxStep,maxStep),kin.lower[i],kin.upper[i]));
+        s.q=s.q.map((v,k)=>clamp(v+clamp(qIk[k]-v,-maxStep,maxStep),kin.lower[k],kin.upper[k]));
       }
     }
     if(changed) lastUpdate=Date.now();
@@ -192,10 +247,14 @@ export function createDualHandIKController(options={}) {
   return {
     updateFromHands,
     getTargets:output,
-    getGripperClosed:()=>({left:states.left.grip<(CFG.gripperOpen+CFG.gripperClosed)/2,right:states.right.grip<(CFG.gripperOpen+CFG.gripperClosed)/2}),
+    getGripperClosed:()=>({left:states.left.closed,right:states.right.closed}),
     isFresh:(now=Date.now())=>lastUpdate>0&&now-lastUpdate<=CFG.staleMs,
     markStale:()=>{lastUpdate=0;},
     getJointRadians:()=>Object.fromEntries(["left","right"].map(side=>[side,states[side].q.slice()])),
-    getHomeRadians:()=>qHome.slice()
+    getHomeRadians:()=>qHomes.right.slice(),
+    getHomeRadiansBySide:()=>({left:qHomes.left.slice(),right:qHomes.right.slice()})
   };
 }
+
+// Exposed for offline tuning/tests.
+export { ArmKinematics, ARM_CHAINS, CFG };

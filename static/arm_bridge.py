@@ -27,6 +27,21 @@ ARM_KEYS = (
 )
 
 
+# URDF joint limits (rad) for [pan, lift, elbow, wrist_flex, wrist_roll, gripper].
+JOINT_LIMITS = (
+    (-1.91986, 1.91986),
+    (-1.74533, 1.74533),
+    (-1.69, 1.69),
+    (-1.65806, 1.65806),
+    (-2.74385, 2.84121),
+    (-0.174533, 1.74533),
+)
+
+
+def clamp(value, low, high):
+    return max(low, min(high, value))
+
+
 def finite(value):
     try:
         value = float(value)
@@ -54,8 +69,17 @@ class HumanoidArmBridge(Node):
             "/left_arm_position_controller/commands",
         )
 
-        self.declare_parameter("gripper_open_rad", 0.0)
-        self.declare_parameter("gripper_closed_rad", 0.7)
+        # Fallback gripper values, used only if the packet carries no gripper_rad.
+        # robot1.py sends gripper_rad (closed=0.0, open=1.2); that is the single
+        # source of truth so both files agree on which direction is "closed".
+        self.declare_parameter("gripper_open_rad", 1.2)
+        self.declare_parameter("gripper_closed_rad", 0.0)
+
+        # Publish at a fixed rate and limit joint speed so the Gazebo position
+        # controllers never receive big steps (which made the joints swing/spin).
+        self.declare_parameter("publish_rate_hz", 50.0)
+        self.declare_parameter("max_joint_speed_rad_s", 3.0)
+        self.declare_parameter("max_gripper_speed_rad_s", 4.0)
 
         self.right_pub = self.create_publisher(
             Float64MultiArray,
@@ -91,7 +115,18 @@ class HumanoidArmBridge(Node):
         self.joint_count = 0
         self.last_log = time.monotonic()
 
+        self.targets = {}   # side -> latest 6 joint targets (rad)
+        self.current = {}   # side -> last published 6 joint values (rad)
+        self.last_step = time.monotonic()
+
+        rate = max(10.0, float(self.get_parameter("publish_rate_hz").value))
+        self.max_speed = float(self.get_parameter("max_joint_speed_rad_s").value)
+        self.max_grip_speed = float(
+            self.get_parameter("max_gripper_speed_rad_s").value
+        )
+
         self.timer = self.create_timer(0.005, self.poll_udp)
+        self.publish_timer = self.create_timer(1.0 / rate, self.step_and_publish)
 
         self.get_logger().info(
             f"Arm bridge listening on {self.host}:{self.port}"
@@ -187,15 +222,24 @@ class HumanoidArmBridge(Node):
                 )
                 return
 
-            grip_value = (
-                float(
-                    self.get_parameter("gripper_closed_rad").value
-                )
-                if closed
-                else float(
-                    self.get_parameter("gripper_open_rad").value
-                )
+            packet_grip = finite(
+                (packet.get("gripper_rad") or {}).get(side)
+                if isinstance(packet.get("gripper_rad"), dict)
+                else None
             )
+
+            if packet_grip is not None:
+                grip_value = packet_grip
+            else:
+                grip_value = (
+                    float(
+                        self.get_parameter("gripper_closed_rad").value
+                    )
+                    if closed
+                    else float(
+                        self.get_parameter("gripper_open_rad").value
+                    )
+                )
 
             if not math.isfinite(grip_value):
                 return
@@ -205,11 +249,40 @@ class HumanoidArmBridge(Node):
 
             output[side] = radians
 
-        self.publish(self.left_pub, output["left"])
-        self.publish(self.right_pub, output["right"])
+        # Clamp to URDF limits and store as the new target; the publish timer
+        # moves toward it at a bounded speed.
+        for side, values in output.items():
+            self.targets[side] = [
+                clamp(v, lo, hi)
+                for v, (lo, hi) in zip(values, JOINT_LIMITS)
+            ]
+            if side not in self.current:
+                self.current[side] = list(self.targets[side])
 
         self.joint_count += 1
         self.periodic_log()
+
+    def step_and_publish(self):
+        now = time.monotonic()
+        dt = max(0.0, min(0.1, now - self.last_step))
+        self.last_step = now
+
+        for side, publisher in (
+            ("left", self.left_pub),
+            ("right", self.right_pub),
+        ):
+            target = self.targets.get(side)
+            current = self.current.get(side)
+
+            if target is None or current is None:
+                continue
+
+            for i, goal in enumerate(target):
+                limit = self.max_grip_speed if i == 5 else self.max_speed
+                step = limit * dt
+                current[i] += clamp(goal - current[i], -step, step)
+
+            self.publish(publisher, current)
 
     @staticmethod
     def publish(publisher, values):
