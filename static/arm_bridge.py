@@ -28,14 +28,19 @@ ARM_KEYS = (
 
 
 # URDF joint limits (rad) for [pan, lift, elbow, wrist_flex, wrist_roll, gripper].
-JOINT_LIMITS = (
+# The gripper limits differ per side (Revolute_28 = right, Revolute_37 = left) and
+# are now negative: ~0 is closed, the negative end is open.
+_ARM_LIMITS = (
     (-1.91986, 1.91986),
     (-1.74533, 1.74533),
     (-1.69, 1.69),
     (-1.65806, 1.65806),
     (-2.74385, 2.84121),
-    (-0.174533, 1.74533),
 )
+JOINT_LIMITS = {
+    "right": _ARM_LIMITS + ((-1.343, 0.137),),
+    "left": _ARM_LIMITS + ((-1.7, 0.220),),
+}
 
 
 def clamp(value, low, high):
@@ -69,11 +74,14 @@ class HumanoidArmBridge(Node):
             "/left_arm_position_controller/commands",
         )
 
-        # Fallback gripper values, used only if the packet carries no gripper_rad.
-        # robot1.py sends gripper_rad (closed=0.0, open=1.2); that is the single
-        # source of truth so both files agree on which direction is "closed".
-        self.declare_parameter("gripper_open_rad", 1.2)
-        self.declare_parameter("gripper_closed_rad", 0.0)
+        # Gripper positions per side, inside the URDF limits above
+        # (right: -1.343..0.137, left: -1.7..0.22). Closed ~ 0, open = negative end.
+        # The open/closed decision comes from the packet's boolean <side>_closed
+        # (robot1.py's gripper_rad assumes the old positive-open range, so it is not used).
+        self.declare_parameter("right_gripper_open_rad", -1.2)
+        self.declare_parameter("right_gripper_closed_rad", 0.0)
+        self.declare_parameter("left_gripper_open_rad", -1.5)
+        self.declare_parameter("left_gripper_closed_rad", 0.0)
 
         # Publish at a fixed rate and limit joint speed so the Gazebo position
         # controllers never receive big steps (which made the joints swing/spin).
@@ -222,24 +230,13 @@ class HumanoidArmBridge(Node):
                 )
                 return
 
-            packet_grip = finite(
-                (packet.get("gripper_rad") or {}).get(side)
-                if isinstance(packet.get("gripper_rad"), dict)
-                else None
-            )
-
-            if packet_grip is not None:
-                grip_value = packet_grip
-            else:
-                grip_value = (
-                    float(
-                        self.get_parameter("gripper_closed_rad").value
-                    )
+            grip_value = float(
+                self.get_parameter(
+                    f"{side}_gripper_closed_rad"
                     if closed
-                    else float(
-                        self.get_parameter("gripper_open_rad").value
-                    )
-                )
+                    else f"{side}_gripper_open_rad"
+                ).value
+            )
 
             if not math.isfinite(grip_value):
                 return
@@ -254,7 +251,7 @@ class HumanoidArmBridge(Node):
         for side, values in output.items():
             self.targets[side] = [
                 clamp(v, lo, hi)
-                for v, (lo, hi) in zip(values, JOINT_LIMITS)
+                for v, (lo, hi) in zip(values, JOINT_LIMITS[side])
             ]
             if side not in self.current:
                 self.current[side] = list(self.targets[side])
