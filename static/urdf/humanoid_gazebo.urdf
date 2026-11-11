@@ -1,9 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <robot name="ABHI_mobile">
-  <material name="silver">
-    <color rgba="0.75 0.75 0.78 1.0" />
-  </material>
-  <link name="base_link">
+  <material name="silver"><color rgba="0.75 0.78 0.82 1.0" /></material><material name="dark_blue"><color rgba="0.025 0.07 0.24 1.0" /></material><material name="grey"><color rgba="0.48 0.50 0.53 1.0" /></material><material name="black"><color rgba="0.015 0.015 0.02 1.0" /></material><material name="orange"><color rgba="1.0 0.32 0.02 1.0" /></material><link name="base_link">
     <inertial>
       <origin xyz="-0.7000083326604734 -0.16856928634122967 0.04999999976833249" rpy="0 0 0" />
       <mass value="10.523338460440668" />
@@ -14,8 +11,7 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/base_link.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="dark_blue" /></visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
@@ -34,8 +30,7 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/upper_cheses_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="dark_blue" /></visual>
     <collision>
       <origin xyz="0.5 0.170034 -0.055" rpy="0 0 0" />
       <geometry>
@@ -54,8 +49,7 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/wheel_right_front_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="black" /></visual>
     <collision>
       <origin xyz="0.57 0.337275 -0.0775" rpy="0 0 0" />
       <geometry>
@@ -74,8 +68,7 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/wheel_right_back_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="black" /></visual>
     <collision>
       <origin xyz="0.83 0.330275 -0.0775" rpy="0 0 0" />
       <geometry>
@@ -94,8 +87,7 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/wheel_left_front_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="black" /></visual>
     <collision>
       <origin xyz="0.57 0.000275 -0.0775" rpy="0 0 0" />
       <geometry>
@@ -114,8 +106,7 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/_wheel_left_back_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="black" /></visual>
     <collision>
       <origin xyz="0.83 0.000275 -0.0775" rpy="0 0 0" />
       <geometry>
@@ -134,8 +125,7 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/stand_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="black" /></visual>
     <collision>
       <origin xyz="0.7 0.170034 -0.165" rpy="0 0 0" />
       <geometry>
@@ -154,8 +144,7 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/lidar_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="silver" /></visual>
     <collision>
       <origin xyz="0.578442 0.170034 -0.165" rpy="0 0 0" />
       <geometry>
@@ -174,8 +163,7 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/camera_stand_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="silver" /></visual>
     <collision>
       <origin xyz="0.7 0.170034 -0.765" rpy="0 0 0" />
       <geometry>
@@ -194,8 +182,7 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/camera_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="orange" /></visual>
     <collision>
       <origin xyz="0.7 0.230149 -0.92" rpy="0 0 0" />
       <geometry>
@@ -214,8 +201,7 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/Base_SO101_R_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="grey" /></visual>
     <collision>
       <origin xyz="0.67 0.215034 -0.765" rpy="0 0 0" />
       <geometry>
@@ -234,8 +220,7 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/base_support_R_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="grey" /></visual>
     <collision>
       <origin xyz="0.668758 0.275649 -0.698692" rpy="0 0 0" />
       <geometry>
@@ -254,8 +239,7 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/board_mount_plate_R_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="grey" /></visual>
     <collision>
       <origin xyz="0.684641 0.266208 -0.717442" rpy="0 0 0" />
       <geometry>
@@ -274,26 +258,15 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint1_R_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="grey" /></visual>
     <collision>
-      <origin xyz="-0.0303992 0.000422241 -0.0417" rpy="1.5708 1.5708 0" />
+      <origin xyz="0.62432 0.258381 -0.707592" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_v1.stl" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint1_R_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
-    <collision>
-      <origin xyz="-0.0675992 -0.000177759 0.0158499" rpy="1.5708 -1.5708 0" />
-      <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/motor_holder_so101_base_v1.stl" />
-      </geometry>
-    </collision>
-    <collision>
-      <origin xyz="0.0122008 2.22413e-05 0.0464" rpy="-1.5708 2.35221e-33 0" />
-      <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/rotation_pitch_so101_v1.stl" />
-      </geometry>
-    </collision>
+    
+    
   </link>
   <link name="joint2_R_1">
     <inertial>
@@ -306,20 +279,14 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint2_R_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="grey" /></visual>
     <collision>
-      <origin xyz="-0.11257 -0.0155 0.0187" rpy="-3.14159 -5.27356e-16 -1.5708" />
+      <origin xyz="0.591409 0.277859 -0.652216" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_v1.stl" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint2_R_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
-    <collision>
-      <origin xyz="-0.065085 0.012 0.0182" rpy="3.14159 -0 -1.30911e-30" />
-      <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/upper_arm_so101_v1.stl" />
-      </geometry>
-    </collision>
+    
   </link>
   <link name="joint3_R_1">
     <inertial>
@@ -332,26 +299,15 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint3_R_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="grey" /></visual>
     <collision>
-      <origin xyz="-0.0648499 -0.032 0.0182" rpy="3.14159 -0 6.67202e-31" />
+      <origin xyz="0.501516 0.273082 -0.561352" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/under_arm_so101_v1.stl" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint3_R_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
-    <collision>
-      <origin xyz="-0.0648499 -0.032 0.018" rpy="-3.14159 -2.55351e-15 -1.83387e-30" />
-      <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/motor_holder_so101_wrist_v1.stl" />
-      </geometry>
-    </collision>
-    <collision>
-      <origin xyz="-0.1224 0.0052 0.0187" rpy="-3.14159 -7.88861e-31 -3.14159" />
-      <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_v1.stl" />
-      </geometry>
-    </collision>
+    
+    
   </link>
   <link name="joint4_R_1">
     <inertial>
@@ -364,20 +320,14 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint4_R_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="grey" /></visual>
     <collision>
-      <origin xyz="8.32667e-17 -0.0424 0.0306" rpy="1.5708 1.5708 0" />
+      <origin xyz="0.39951 0.269245 -0.457493" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_no_horn_v1.stl" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint4_R_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
-    <collision>
-      <origin xyz="0 -0.028 0.0181" rpy="-1.5708 -1.5708 0" />
-      <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/wrist_roll_pitch_so101_v2.stl" />
-      </geometry>
-    </collision>
+    
   </link>
   <link name="joint5_R_1">
     <inertial>
@@ -390,20 +340,14 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint5_R_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="grey" /></visual>
     <collision>
-      <origin xyz="0.0077 0.0001 -0.0234" rpy="-1.5708 -5.19179e-17 -1.66533e-16" />
+      <origin xyz="0.349385 0.251405 -0.421445" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_v1.stl" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint5_R_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
-    <collision>
-      <origin xyz="8.32667e-17 -0.000218214 0.000949706" rpy="-3.14159 -5.55112e-17 0" />
-      <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/wrist_roll_follower_so101_v1.stl" />
-      </geometry>
-    </collision>
+    
   </link>
   <link name="joint6_R_1">
     <inertial>
@@ -416,12 +360,11 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint6_R_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="grey" /></visual>
     <collision>
-      <origin xyz="-5.55112e-17 -5.55112e-17 0.0189" rpy="9.53145e-17 6.93889e-18 1.24077e-24" />
+      <origin xyz="0.34127 0.264645 -0.387621" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/moving_jaw_so101_v1.stl" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint6_R_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
   </link>
@@ -436,8 +379,7 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/Base_SO101_L_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="grey" /></visual>
     <collision>
       <origin xyz="0.67 0.125034 -0.765" rpy="0 0 0" />
       <geometry>
@@ -456,8 +398,7 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/base_support_L_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="grey" /></visual>
     <collision>
       <origin xyz="0.668758 0.064418 -0.698692" rpy="0 0 0" />
       <geometry>
@@ -476,8 +417,7 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/board_mount_plate_L_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="grey" /></visual>
     <collision>
       <origin xyz="-0.050303 -0.620723 -0.817421" rpy="0 0 0" />
       <geometry>
@@ -496,26 +436,15 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint1_L_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="grey" /></visual>
     <collision>
-      <origin xyz="-0.0303992 0.000422241 -0.0417" rpy="1.5708 1.5708 0" />
+      <origin xyz="0.62432 0.082049 -0.707592" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_v1.stl" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint1_L_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
-    <collision>
-      <origin xyz="-0.0675992 -0.000177759 0.0158499" rpy="1.5708 -1.5708 0" />
-      <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/motor_holder_so101_base_v1.stl" />
-      </geometry>
-    </collision>
-    <collision>
-      <origin xyz="0.0122008 2.22413e-05 0.0464" rpy="-1.5708 2.35221e-33 0" />
-      <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/rotation_pitch_so101_v1.stl" />
-      </geometry>
-    </collision>
+    
+    
   </link>
   <link name="joint2_L_1">
     <inertial>
@@ -528,20 +457,14 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint2_L_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="grey" /></visual>
     <collision>
-      <origin xyz="-0.11257 -0.0155 0.0187" rpy="-3.14159 -5.27356e-16 -1.5708" />
+      <origin xyz="0.59097 0.100658 -0.652216" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_v1.stl" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint2_L_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
-    <collision>
-      <origin xyz="-0.065085 0.012 0.0182" rpy="3.14159 -0 -1.30911e-30" />
-      <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/upper_arm_so101_v1.stl" />
-      </geometry>
-    </collision>
+    
   </link>
   <link name="joint3_L_1">
     <inertial>
@@ -554,26 +477,15 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint3_L_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="grey" /></visual>
     <collision>
-      <origin xyz="-0.0648499 -0.032 0.0182" rpy="3.14159 -0 6.67202e-31" />
+      <origin xyz="0.498371 0.093605 -0.564265" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/under_arm_so101_v1.stl" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint3_L_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
-    <collision>
-      <origin xyz="-0.0648499 -0.032 0.018" rpy="-3.14159 -2.55351e-15 -1.83387e-30" />
-      <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/motor_holder_so101_wrist_v1.stl" />
-      </geometry>
-    </collision>
-    <collision>
-      <origin xyz="-0.1224 0.0052 0.0187" rpy="-3.14159 -7.88861e-31 -3.14159" />
-      <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_v1.stl" />
-      </geometry>
-    </collision>
+    
+    
   </link>
   <link name="joint4_L_1">
     <inertial>
@@ -586,20 +498,14 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint4_L_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="grey" /></visual>
     <collision>
-      <origin xyz="8.32667e-17 -0.0424 0.0306" rpy="1.5708 1.5708 0" />
+      <origin xyz="0.393156 0.087178 -0.463789" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_no_horn_v1.stl" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint4_L_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
-    <collision>
-      <origin xyz="0 -0.028 0.0181" rpy="-1.5708 -1.5708 0" />
-      <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/wrist_roll_pitch_so101_v2.stl" />
-      </geometry>
-    </collision>
+    
   </link>
   <link name="joint5_L_1">
     <inertial>
@@ -612,20 +518,14 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint5_L_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="grey" /></visual>
     <collision>
-      <origin xyz="0.0077 0.0001 -0.0234" rpy="-1.5708 -5.19179e-17 -1.66533e-16" />
+      <origin xyz="0.341094 0.068023 -0.431343" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/sts3215_03a_v1.stl" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint5_L_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
-    <collision>
-      <origin xyz="8.32667e-17 -0.000218214 0.000949706" rpy="-3.14159 -5.55112e-17 0" />
-      <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/wrist_roll_follower_so101_v1.stl" />
-      </geometry>
-    </collision>
+    
   </link>
   <link name="joint6_L_1">
     <inertial>
@@ -638,12 +538,11 @@
       <geometry>
         <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint6_L_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
-      <material name="silver" />
-    </visual>
+      <material name="grey" /></visual>
     <collision>
-      <origin xyz="-5.55112e-17 -5.55112e-17 0.0189" rpy="9.53145e-17 6.93889e-18 1.24077e-24" />
+      <origin xyz="0.332695 0.057196 -0.396739" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/so101_follower/assets/moving_jaw_so101_v1.stl" />
+        <mesh filename="file:///home/shourya007/teleToAuto_ADY/static/meshes/joint6_L_1.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
   </link>
@@ -905,7 +804,9 @@
     </plugin>
   </gazebo>
   <gazebo reference="camera_1">
+    <material>Gazebo/Orange</material>
     <sensor name="humanoid_front_camera" type="camera">
+      <pose>0 0.06 0 0 0 0</pose>
       <always_on>true</always_on>
       <update_rate>30</update_rate>
       <visualize>true</visualize>
@@ -929,5 +830,88 @@
         </ros>
       </plugin>
     </sensor>
+  </gazebo>
+
+  <!-- Gazebo Classic material overrides (RViz RGBA materials remain above) -->
+  <gazebo reference="base_link">
+    <material>Gazebo/Blue</material>
+  </gazebo>
+  <gazebo reference="upper_cheses_1">
+    <material>Gazebo/Blue</material>
+  </gazebo>
+  <gazebo reference="wheel_right_front_1">
+    <material>Gazebo/Black</material>
+  </gazebo>
+  <gazebo reference="wheel_right_back_1">
+    <material>Gazebo/Black</material>
+  </gazebo>
+  <gazebo reference="wheel_left_front_1">
+    <material>Gazebo/Black</material>
+  </gazebo>
+  <gazebo reference="_wheel_left_back_1">
+    <material>Gazebo/Black</material>
+  </gazebo>
+  <gazebo reference="stand_1">
+    <material>Gazebo/Black</material>
+  </gazebo>
+  <gazebo reference="lidar_1">
+    <material>Gazebo/Chrome</material>
+  </gazebo>
+  <gazebo reference="camera_stand_1">
+    <material>Gazebo/Chrome</material>
+  </gazebo>
+  <gazebo reference="Base_SO101_R_1">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="base_support_R_1">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="board_mount_plate_R_1">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="joint1_R_1">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="joint2_R_1">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="joint3_R_1">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="joint4_R_1">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="joint5_R_1">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="joint6_R_1">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="Base_SO101_L_1">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="base_support_L_1">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="board_mount_plate_L_1">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="joint1_L_1">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="joint2_L_1">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="joint3_L_1">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="joint4_L_1">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="joint5_L_1">
+    <material>Gazebo/Grey</material>
+  </gazebo>
+  <gazebo reference="joint6_L_1">
+    <material>Gazebo/Grey</material>
   </gazebo>
 </robot>
