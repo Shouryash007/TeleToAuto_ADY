@@ -1,7 +1,7 @@
 // Browser-side dual SO-101 hand teleoperation.
 // MediaPipe hand features -> DLS/Jacobian IK.
 //
-// The IK now uses the SAME kinematic chains as static/urdf/humanoid_gazebo.urdf
+// The IK uses the SAME kinematic chains as static/urdf/humanoid_gazebo.urdf
 // (Revolute_23..27 right arm, Revolute_32..36 left arm): the real joint origins
 // and joint axes of the simulated, upside-down-mounted arms. Joint angles that
 // come out of the solver are therefore exactly the angles the Gazebo position
@@ -10,8 +10,24 @@
 // All frames in the URDF arm chains have rpy = 0, so the arm base frame is
 // axis-aligned with the robot frame: +X forward, +Y left, +Z up.
 // Output is compatible with the existing robot-connection.js joint_targets packet.
+//
+// NEW in this version
+//  * Quality-aware input: hands arrive from hand-tracker.js with quality / status /
+//    pinchQuality / reacquired. Low-quality frames are ignored, smoothing weakens with
+//    quality, the gripper HOLDS while fingertips are unreliable (occluded / coasting).
+//  * Re-acquire ramp: after an occlusion the arm target glides (rate-limited) to the
+//    hand's new position instead of snapping. A global target speed limit is applied too.
+//  * User <-> robot calibration (see startCalibration / sync):
+//      NEUTRAL   - operator holds a relaxed hand still; that pose becomes the robot's home pose.
+//      WORKSPACE - operator sweeps the hand to its comfortable extremes; the per-axis
+//                  (asymmetric) spans are fitted so the full robot range maps onto the
+//                  operator's own reach.
+//      USER-SYNC - one-shot re-centre ("clutch"): re-references the hand without moving the
+//                  robot (anchor "current") or glides it to home (anchor "home").
+//    Calibration is persisted in localStorage and auto-loaded.
 
 const JOINTS = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll"];
+const SIDES = ["left", "right"];
 const DEG = 180 / Math.PI;
 
 // [origin xyz in parent frame, axis in parent frame, [lower, upper]] copied from the URDF.
@@ -45,7 +61,7 @@ const CFG = {
   // pitch left free (pitchWeight 0) the arm can reach about +-0.11 m forward/back,
   // +-0.25 m sideways and +-0.11 m up/down around this home pose.
   home: [0.28, 0.012, -0.24], homePitch: 0.4,
-  range: [0.09, 0.20, 0.09], handSpanX: 0.22, handSpanY: 0.20,
+  range: [0.09, 0.20, 0.09], handSpanX: 0.22, handSpanY: 0.20,   // spans = UNCALIBRATED defaults
   depthSpan: 0.35, depthSign: 1, lateralSign: 1, rollGain: 1, rollSign: 1,
   pitchWeight: 0, nullGain: 0.05, damping: 0.05, iterations: 25, maxJointSpeed: 3.0,
   // Input filtering. Lower smoothing = smoother but laggier.
@@ -55,7 +71,32 @@ const CFG = {
   // MediaPipe assumes a mirrored (selfie) image. The tracker feeds the raw, un-mirrored
   // webcam frame, so MediaPipe's "Left" label is the operator's RIGHT hand. Swapping makes the
   // operator's right hand drive the robot's right arm. Set false if your arms appear crossed.
-  swapHands: true
+  swapHands: true,
+
+  // --- quality / occlusion handling (values come from hand-tracker.js) ---
+  minQuality: 0.25,          // frames below this are ignored (arm holds its last pose)
+  minPinchQuality: 0.5,      // below this the gripper holds instead of following the pinch
+  maxTargetSpeed: 1.5,       // m/s limit on the IK target (safety / anti-teleport)
+  reacquireTargetSpeed: 0.2, // m/s right after a hand re-appears ...
+  reacquireRampMs: 800,      // ... blending up to maxTargetSpeed over this long
+  reacquireGapMs: 400,       // a gap in observations longer than this counts as re-acquire
+  motionScale: 1,            // 0..1: scale the whole hand->robot motion (precision mode)
+
+  // --- calibration ---
+  autoLoadCalibration: true,
+  calib: {
+    storageKey: "dualHandIK.calibration.v1",
+    minQuality: 0.6,         // only high-quality frames are used for calibration
+    neutralHoldMs: 2000,     // how long the hand must stay still in the NEUTRAL step
+    stillTol: 0.02,          // max drift (image units) allowed during the hold
+    workspaceMs: 9000,       // length of the WORKSPACE sweep
+    minSamples: 60,
+    percentile: 0.03,        // robust extremes: ignore the most extreme 3% each side
+    spanShrink: 0.9,         // reach 100% of the robot range at 90% of the operator's extreme
+    minSpan: 0.03, maxSpan: 0.45,           // image units
+    minDepthSpan: 0.06, maxDepthSpan: 0.8,  // palm-size ratio
+    timeoutMs: 20000         // give up on the NEUTRAL step if no steady hand shows up
+  }
 };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -68,6 +109,19 @@ const dot = (a,b) => a.reduce((s,v,i)=>s+v*b[i],0);
 // roll reference drift by 2*PI and made the joint spin.)
 const TWO_PI = 2*Math.PI;
 const wrap = a => ((a + Math.PI) % TWO_PI + TWO_PI) % TWO_PI - Math.PI;
+
+// Asymmetric normalisation: d>=0 uses the positive span, d<0 the negative span -> [-1, 1].
+const axisNorm = (d, neg, pos) => d >= 0 ? clamp(d/pos, 0, 1) : clamp(d/neg, -1, 0);
+const percentile = (arr, p) => {
+  const a = [...arr].sort((x,y)=>x-y);
+  return a[clamp(Math.floor(p*(a.length-1)), 0, a.length-1)];
+};
+// Move `a` toward `b` by at most `maxDist`.
+function stepToward(a, b, maxDist){
+  const d = sub(b, a), n = norm(d);
+  if(n<=maxDist || n<1e-9) return b.slice();
+  return a.map((v,i)=>v+d[i]*maxDist/n);
+}
 
 function matVec(R,v){return [dot(R[0],v),dot(R[1],v),dot(R[2],v)];}
 function matMul3(A,B){
@@ -184,58 +238,300 @@ function features(hand){
 }
 
 export function createDualHandIKController(options={}) {
-  Object.assign(CFG,options);
+  // `onCalibration` is a callback, not a tunable: keep it out of CFG.
+  const {onCalibration, calib:calibOpts, ...cfgOptions}=options;
+  Object.assign(CFG,cfgOptions);
+  if(calibOpts) CFG.calib={...CFG.calib,...calibOpts};
+
   const kins={left:new ArmKinematics(ARM_CHAINS.left),right:new ArmKinematics(ARM_CHAINS.right)};
   const qHomes={left:kins.left.homeConfiguration(),right:kins.right.homeConfiguration()};
-  for(const side of ["left","right"]) kins[side].targetPitch=kins[side].pitch(qHomes[side]);
+  for(const side of SIDES) kins[side].targetPitch=kins[side].pitch(qHomes[side]);
+
+  const defaultSpans=()=>({
+    xNeg:CFG.handSpanX, xPos:CFG.handSpanX,     // image x: + = operator moves hand to THEIR LEFT
+    yUp:CFG.handSpanY,  yDown:CFG.handSpanY,
+    dNear:CFG.depthSpan, dFar:CFG.depthSpan     // palm-size ratio: + = closer to the camera
+  });
   const mkState=side=>({q:qHomes[side].slice(),refs:null,smoothed:null,lastSeen:0,
-    target:CFG.home.slice(),roll:0,grip:CFG.gripperOpen,closed:false});
+    target:CFG.home.slice(),desired:CFG.home.slice(),origin:CFG.home.slice(),
+    roll:0,grip:CFG.gripperOpen,closed:false,
+    spans:defaultSpans(),calibrated:false,quality:0,ramp:0,frozen:false});
   const states={left:mkState("left"),right:mkState("right")};
   let lastUpdate=0, lastTime=performance.now();
+
   const gripPercent=s=>clamp((CFG.gripperOpen-s.grip)/(CFG.gripperOpen-CFG.gripperClosed)*100,0,100);
-  const output=()=>Object.fromEntries(["left","right"].map(side=>{
+  const output=()=>Object.fromEntries(SIDES.map(side=>{
     const s=states[side], a={};
     JOINTS.forEach((n,i)=>a[n]=s.q[i]*DEG);
     a.gripper=gripPercent(s);
     return [side,a];
   }));
+
+  // ------------------------------------------------------------------
+  // Calibration
+  // ------------------------------------------------------------------
+  const calib={active:false,phase:"idle",message:"",t0:0,phaseT0:0,lastEmit:0,sides:[],
+    buf:{left:[],right:[]},ws:{left:[],right:[]},ext:{left:null,right:null},
+    done:{left:false,right:false},progress:{left:0,right:0}};
+
+  function emitCal(force=false){
+    const now=performance.now();
+    if(!force && now-calib.lastEmit<100) return;
+    calib.lastEmit=now;
+    const sideInfo=Object.fromEntries(SIDES.map(sd=>{
+      const e=calib.ext[sd], m=CFG.calib.minSpan;
+      return [sd,{
+        done:calib.done[sd], progress:calib.progress[sd], calibrated:states[sd].calibrated,
+        // Workspace coverage in operator terms: which directions have been reached so far.
+        coverage:(calib.phase==="workspace"&&e)?{
+          left:e.xmax>m, right:-e.xmin>m, up:e.ymax>m, down:-e.ymin>m,
+          closer:e.smax>CFG.calib.minDepthSpan, farther:-e.smin>CFG.calib.minDepthSpan}:null
+      }];
+    }));
+    const p=calib.sides.length?Math.min(...calib.sides.map(sd=>calib.progress[sd])):0;
+    onCalibration?.({active:calib.active,phase:calib.phase,progress:p,message:calib.message,sides:sideInfo});
+  }
+
+  function startCalibration(sides=SIDES){
+    const now=performance.now();
+    calib.active=true; calib.phase="neutral"; calib.t0=calib.phaseT0=now;
+    calib.sides=sides.filter(sd=>SIDES.includes(sd));
+    for(const sd of SIDES){
+      calib.buf[sd]=[]; calib.ws[sd]=[]; calib.ext[sd]=null;
+      calib.done[sd]=false; calib.progress[sd]=0;
+    }
+    calib.message="NEUTRAL: hold a relaxed, comfortable open hand still in front of the camera";
+    emitCal(true);
+  }
+
+  function cancelCalibration(message="CALIBRATION CANCELLED"){
+    calib.active=false; calib.phase="idle"; calib.message=message;
+    emitCal(true);
+  }
+
+  function feedCalibration(side,f,q,now){
+    if(!calib.active || !calib.sides.includes(side) || q<CFG.calib.minQuality) return;
+    const s=states[side];
+    if(calib.phase==="neutral"){
+      if(calib.done[side]) return;
+      const buf=calib.buf[side];
+      if(buf.length && now-buf[buf.length-1].t>300) buf.length=0;     // hand was lost: start over
+      if(buf.length){
+        const mx=buf.reduce((a,b)=>a+b.cx,0)/buf.length, my=buf.reduce((a,b)=>a+b.cy,0)/buf.length;
+        if(Math.hypot(f.cx-mx,f.cy-my)>CFG.calib.stillTol) buf.length=0; // moved: start over
+      }
+      buf.push({t:now,cx:f.cx,cy:f.cy,size:f.size,sin:Math.sin(f.roll),cos:Math.cos(f.roll)});
+      calib.progress[side]=clamp((now-buf[0].t)/CFG.calib.neutralHoldMs,0,1);
+      if(calib.progress[side]>=1){
+        const n=buf.length, avg=k=>buf.reduce((a,b)=>a+b[k],0)/n;
+        s.refs={cx:avg("cx"),cy:avg("cy"),size:avg("size"),roll:Math.atan2(avg("sin"),avg("cos"))};
+        s.spans=defaultSpans(); s.calibrated=false;
+        s.origin=CFG.home.slice();            // neutral hand pose == robot home pose
+        s.ramp=CFG.reacquireRampMs/1000;      // glide to home once the freeze ends
+        calib.done[side]=true;
+      }
+    } else if(calib.phase==="workspace" && s.refs){
+      const dx=f.cx-s.refs.cx, dy=-(f.cy-s.refs.cy), ds=f.size/s.refs.size-1;
+      if(calib.ws[side].length<5000) calib.ws[side].push({dx,dy,ds});
+      const e=calib.ext[side]||(calib.ext[side]={xmin:0,xmax:0,ymin:0,ymax:0,smin:0,smax:0});
+      e.xmin=Math.min(e.xmin,dx); e.xmax=Math.max(e.xmax,dx);
+      e.ymin=Math.min(e.ymin,dy); e.ymax=Math.max(e.ymax,dy);
+      e.smin=Math.min(e.smin,ds); e.smax=Math.max(e.smax,ds);
+    }
+  }
+
+  function finalizeWorkspace(){
+    const C=CFG.calib, warn=[];
+    for(const side of calib.sides){
+      const w=calib.ws[side], s=states[side];
+      if(w.length<C.minSamples){ warn.push(side); continue; }
+      const col=k=>w.map(x=>x[k]);
+      const dx=col("dx"), dy=col("dy"), ds=col("ds");
+      const hi=a=>percentile(a,1-C.percentile), lo=a=>percentile(a,C.percentile);
+      // raw extreme -> span; if the operator never really moved on an axis keep the default.
+      const fin=(raw,def,min,max)=>raw>=min?clamp(raw*C.spanShrink,min,max):def;
+      s.spans={
+        xPos:fin(hi(dx),CFG.handSpanX,C.minSpan,C.maxSpan),  xNeg:fin(-lo(dx),CFG.handSpanX,C.minSpan,C.maxSpan),
+        yUp:fin(hi(dy),CFG.handSpanY,C.minSpan,C.maxSpan),   yDown:fin(-lo(dy),CFG.handSpanY,C.minSpan,C.maxSpan),
+        dNear:fin(hi(ds),CFG.depthSpan,C.minDepthSpan,C.maxDepthSpan),
+        dFar:fin(-lo(ds),CFG.depthSpan,C.minDepthSpan,C.maxDepthSpan)
+      };
+      s.calibrated=true;
+    }
+    calib.active=false; calib.phase="done";
+    calib.message=warn.length
+      ? `CALIBRATION PARTIAL: not enough hand data for ${warn.join(" + ")}`
+      : "CALIBRATION COMPLETE";
+    for(const sd of calib.sides) calib.progress[sd]=1;
+    saveCalibration();
+    emitCal(true);
+  }
+
+  function tickCalibration(now){
+    if(!calib.active) return;
+    if(calib.phase==="neutral"){
+      if(calib.sides.every(sd=>calib.done[sd])){
+        calib.phase="workspace"; calib.phaseT0=now;
+        for(const sd of SIDES) calib.progress[sd]=0;
+        calib.message="WORKSPACE: sweep your hand left, right, up, down, closer and farther";
+        emitCal(true);
+      } else if(now-calib.phaseT0>CFG.calib.timeoutMs){
+        const missing=calib.sides.filter(sd=>!calib.done[sd]).join(" + ");
+        cancelCalibration(`CALIBRATION TIMED OUT: no steady hand for ${missing}`);
+      } else emitCal();
+    } else if(calib.phase==="workspace"){
+      const p=clamp((now-calib.phaseT0)/CFG.calib.workspaceMs,0,1);
+      for(const sd of calib.sides) calib.progress[sd]=p;
+      if(p>=1) finalizeWorkspace(); else emitCal();
+    }
+  }
+
+  // USER-SYNC: re-reference the hand to the robot. Needs a currently visible hand.
+  //  anchor "current": robot stays where it is, the hand's present pose becomes the new zero
+  //                    (use like lifting a mouse to re-centre; no motion at all).
+  //  anchor "home":    hand's present pose is mapped to the robot home pose; the arm glides there.
+  function sync({sides=SIDES,anchor="current",delayMs=0}={}){
+    const run=()=>{
+      const now=performance.now(), synced=[];
+      for(const side of sides){
+        const s=states[side];
+        if(!SIDES.includes(side) || !s.smoothed || !s.lastSeen || now-s.lastSeen>CFG.lostHoldMs) continue;
+        s.refs={cx:s.smoothed.cx,cy:s.smoothed.cy,size:s.smoothed.size,roll:s.smoothed.roll};
+        if(anchor==="home"){
+          s.origin=CFG.home.slice();
+          s.desired=s.origin.slice();
+          s.ramp=CFG.reacquireRampMs/1000;
+        } else {
+          const p=kins[side].fkFull(s.q).p;
+          s.origin=p.map((v,k)=>clamp(v,CFG.home[k]-CFG.range[k],CFG.home[k]+CFG.range[k]));
+          s.desired=s.origin.slice();
+          s.target=s.origin.slice();
+        }
+        synced.push(side);
+      }
+      calib.message=synced.length?`SYNCED ${synced.join(" + ").toUpperCase()}`:"SYNC FAILED: show your hand to the camera";
+      emitCal(true);
+      return synced;
+    };
+    if(delayMs>0){
+      calib.message=`SYNC in ${Math.ceil(delayMs/1000)} s: hold the pose that should match the robot`;
+      emitCal(true);
+      return new Promise(res=>setTimeout(()=>res(run()),delayMs));
+    }
+    return Promise.resolve(run());
+  }
+
+  // ---- persistence ----
+  function exportCalibration(){
+    return {version:1,savedAt:Date.now(),sides:Object.fromEntries(
+      SIDES.filter(sd=>states[sd].refs&&states[sd].calibrated)
+           .map(sd=>[sd,{refs:{...states[sd].refs},spans:{...states[sd].spans}}]))};
+  }
+  function importCalibration(data){
+    if(!data||data.version!==1||!data.sides) return false;
+    const finite=o=>o&&Object.values(o).every(v=>Number.isFinite(v));
+    let ok=false;
+    for(const sd of SIDES){
+      const e=data.sides[sd];
+      if(!e||!finite(e.refs)||!finite(e.spans)) continue;
+      if(!Object.values(e.spans).every(v=>v>0)) continue;
+      states[sd].refs={cx:e.refs.cx,cy:e.refs.cy,size:e.refs.size,roll:e.refs.roll};
+      states[sd].spans={...defaultSpans(),...e.spans};
+      states[sd].calibrated=true; ok=true;
+    }
+    return ok;
+  }
+  function saveCalibration(){
+    try{localStorage.setItem(CFG.calib.storageKey,JSON.stringify(exportCalibration()));return true;}
+    catch{return false;}
+  }
+  function loadCalibration(){
+    try{const raw=localStorage.getItem(CFG.calib.storageKey);return raw?importCalibration(JSON.parse(raw)):false;}
+    catch{return false;}
+  }
+  function resetCalibration(){
+    for(const sd of SIDES){
+      const s=states[sd];
+      s.refs=null; s.spans=defaultSpans(); s.calibrated=false; s.origin=CFG.home.slice();
+    }
+    try{localStorage.removeItem(CFG.calib.storageKey);}catch{}
+    calib.message="CALIBRATION RESET"; emitCal(true);
+  }
+  if(CFG.autoLoadCalibration) loadCalibration();
+
+  // ------------------------------------------------------------------
+  // Main update: hands + handedness come from hand-tracker.js
+  // ------------------------------------------------------------------
   function updateFromHands(hands,handedness){
     const now=performance.now(), dt=clamp((now-lastTime)/1000,0.001,0.1); lastTime=now;
     let changed=false;
     for(let i=0;i<(hands||[]).length;i++){
-      let label=String(handedness?.[i]?.label||"").toLowerCase();
+      const meta=handedness?.[i]||{};
+      let label=String(meta.label||"").toLowerCase();
       if(label!=="left"&&label!=="right") continue;
       if(CFG.swapHands) label=label==="left"?"right":"left";
       const side=label, s=states[side], f=features(hands[i]);
       if(!f) continue;
-      s.lastSeen=now; changed=true;
-      if(!s.refs){s.refs={...f};s.smoothed={...f};}
-      const a=CFG.smoothing;
-      for(const key of ["cx","cy","size","pinch"]) s.smoothed[key]=(1-a)*s.smoothed[key]+a*f[key];
+
+      // Confidence gate: a frame the tracker does not trust never moves the arm.
+      const q=meta.quality??1;
+      if(q<CFG.minQuality) continue;
+
+      const gap=s.lastSeen?now-s.lastSeen:0;
+      const reacquire=!!meta.reacquired||(s.lastSeen>0&&gap>CFG.reacquireGapMs);
+      if(!s.refs) s.refs={...f};
+      if(!s.smoothed||reacquire){
+        s.smoothed={...f};                                  // do not glide from stale values
+        if(s.lastSeen) s.ramp=CFG.reacquireRampMs/1000;     // ... let the target glide instead
+      }
+      s.lastSeen=now; s.quality=q; changed=true;
+
+      // Lower quality -> weaker influence on the smoothed signal.
+      const a=clamp(CFG.smoothing*(0.4+0.6*q),0.05,1);
+      for(const key of ["cx","cy","size"]) s.smoothed[key]=(1-a)*s.smoothed[key]+a*f[key];
       // Angular smoothing on the shortest path, kept wrapped so it can never drift by 2*PI.
       s.smoothed.roll=wrap(s.smoothed.roll+a*wrap(f.roll-s.smoothed.roll));
+      // Pinch only follows the fingers when the tracker trusts the thumb/index tips.
+      const pinchOk=(meta.pinchQuality??1)>=CFG.minPinchQuality;
+      if(pinchOk) s.smoothed.pinch=(1-a)*s.smoothed.pinch+a*f.pinch;
+
+      feedCalibration(side,s.smoothed,q,now);
+
       const cx=s.smoothed.cx,cy=s.smoothed.cy,size=s.smoothed.size;
       // Small dead-band so camera/landmark jitter around the reference does not move the arm.
       const db=v=>Math.abs(v)<CFG.deadband?0:v;
-      const ux=clamp(db(cx-s.refs.cx)/CFG.handSpanX,-1,1)*CFG.lateralSign;
-      const uz=clamp(-db(cy-s.refs.cy)/CFG.handSpanY,-1,1);
-      const ud=clamp((size/s.refs.size-1)/CFG.depthSpan,-1,1)*CFG.depthSign;
+      const sp=s.spans;
+      const ux=axisNorm(db(cx-s.refs.cx),sp.xNeg,sp.xPos)*CFG.lateralSign;
+      const uz=axisNorm(db(-(cy-s.refs.cy)),sp.yDown,sp.yUp);
+      const ud=axisNorm(size/s.refs.size-1,sp.dFar,sp.dNear)*CFG.depthSign;
       // Robot frame: +X forward, +Y left, +Z up. The raw (un-mirrored) camera image has the
       // operator's right hand at smaller cx, so +ux (larger cx) maps to +Y (left) on the robot.
       // The reachable volume is ellipsoidal, not a box: limit the combined hand offset to the
       // unit ball so diagonal hand moves (e.g. far + up + sideways) stay reachable.
       let off=[ud,ux,uz]; const len=Math.hypot(...off); if(len>1) off=off.map(v=>v/len);
-      s.target=[CFG.home[0]+off[0]*CFG.range[0],CFG.home[1]+off[1]*CFG.range[1],CFG.home[2]+off[2]*CFG.range[2]];
+      off=off.map(v=>v*CFG.motionScale);
+      s.desired=[s.origin[0]+off[0]*CFG.range[0],s.origin[1]+off[1]*CFG.range[1],s.origin[2]+off[2]*CFG.range[2]];
       const kin=kins[side];
       s.roll=clamp(CFG.rollSign*CFG.rollGain*wrap(s.smoothed.roll-s.refs.roll),kin.lower[4],kin.upper[4]);
-      const t=clamp((s.smoothed.pinch-CFG.pinchClosed)/(CFG.pinchOpen-CFG.pinchClosed),0,1);
-      s.grip=CFG.gripperClosed+t*(CFG.gripperOpen-CFG.gripperClosed);
-      // Hysteresis so the gripper does not chatter around the threshold.
-      if(!s.closed && t<0.35) s.closed=true; else if(s.closed && t>0.65) s.closed=false;
+      if(pinchOk){
+        const t=clamp((s.smoothed.pinch-CFG.pinchClosed)/(CFG.pinchOpen-CFG.pinchClosed),0,1);
+        s.grip=CFG.gripperClosed+t*(CFG.gripperOpen-CFG.gripperClosed);
+        // Hysteresis so the gripper does not chatter around the threshold.
+        if(!s.closed && t<0.35) s.closed=true; else if(s.closed && t>0.65) s.closed=false;
+      } // else: fingers occluded / predicted -> gripper holds its last state
     }
-    for(const side of ["left","right"]){
+
+    tickCalibration(now);
+
+    for(const side of SIDES){
       const s=states[side], kin=kins[side];
-      if(s.lastSeen && now-s.lastSeen<=CFG.lostHoldMs){
+      s.frozen=calib.active&&calib.phase==="neutral"&&calib.sides.includes(side);
+      // Rate-limit the IK target: slow glide right after a (re-)acquire, normal limit otherwise.
+      if(s.ramp>0) s.ramp=Math.max(0,s.ramp-dt);
+      const rampFrac=CFG.reacquireRampMs>0?s.ramp/(CFG.reacquireRampMs/1000):0;
+      const speed=CFG.maxTargetSpeed+(CFG.reacquireTargetSpeed-CFG.maxTargetSpeed)*rampFrac;
+      s.target=stepToward(s.target,s.desired,speed*dt);
+      if(!s.frozen && s.lastSeen && now-s.lastSeen<=CFG.lostHoldMs){
         const qIk=kin.solve(s.q,s.target,s.roll,qHomes[side]);
         const maxStep=CFG.maxJointSpeed*dt;
         s.q=s.q.map((v,k)=>clamp(v+clamp(qIk[k]-v,-maxStep,maxStep),kin.lower[k],kin.upper[k]));
@@ -244,15 +540,28 @@ export function createDualHandIKController(options={}) {
     if(changed) lastUpdate=Date.now();
     return changed;
   }
+
   return {
     updateFromHands,
     getTargets:output,
     getGripperClosed:()=>({left:states.left.closed,right:states.right.closed}),
     isFresh:(now=Date.now())=>lastUpdate>0&&now-lastUpdate<=CFG.staleMs,
     markStale:()=>{lastUpdate=0;},
-    getJointRadians:()=>Object.fromEntries(["left","right"].map(side=>[side,states[side].q.slice()])),
+    getJointRadians:()=>Object.fromEntries(SIDES.map(side=>[side,states[side].q.slice()])),
     getHomeRadians:()=>qHomes.right.slice(),
-    getHomeRadiansBySide:()=>({left:qHomes.left.slice(),right:qHomes.right.slice()})
+    getHomeRadiansBySide:()=>({left:qHomes.left.slice(),right:qHomes.right.slice()}),
+    // --- tracking status (for UI) ---
+    getStatus:()=>Object.fromEntries(SIDES.map(side=>{
+      const s=states[side], now=performance.now();
+      return [side,{tracking:s.lastSeen>0&&now-s.lastSeen<=CFG.lostHoldMs,quality:s.quality,
+                    calibrated:s.calibrated,ramping:s.ramp>0}];
+    })),
+    setMotionScale:v=>{CFG.motionScale=clamp(v,0,1);},
+    // --- calibration ---
+    startCalibration,cancelCalibration,sync,
+    getCalibration:exportCalibration,setCalibration:importCalibration,
+    saveCalibration,loadCalibration,resetCalibration,
+    isCalibrating:()=>calib.active
   };
 }
 

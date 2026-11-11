@@ -12,7 +12,7 @@ def generate_launch_description():
     here = Path(__file__).resolve().parent
     urdf_path = here / "urdf" / "humanoid_gazebo.urdf"
     controller_yaml = here / "humanoid_controllers.yaml"
-    world_path = Path("/usr/share/gazebo-11/worlds/empty.world")
+    world_path = here / "urdf" / "robot_interaction.world"
 
     for path in (urdf_path, controller_yaml, world_path):
         if not path.is_file():

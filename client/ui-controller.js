@@ -228,6 +228,71 @@ export function createUi(handlers = {}) {
     }
 
     // -------------------------
+    // Video display controls
+    // -------------------------
+    function addVideoControls(viewport, video, label) {
+        if (!viewport || !video || viewport.querySelector(".video-tools")) return;
+
+        const tools = document.createElement("div");
+        tools.className = "video-tools";
+        tools.setAttribute("aria-label", `${label} display controls`);
+
+        const pipButton = document.createElement("button");
+        pipButton.type = "button";
+        pipButton.className = "video-tool-button";
+        pipButton.textContent = "PiP";
+        pipButton.title = `Open ${label} in picture-in-picture`;
+        pipButton.setAttribute("aria-label", `Open ${label} in picture-in-picture`);
+        pipButton.disabled = !(document.pictureInPictureEnabled && video.requestPictureInPicture);
+
+        pipButton.addEventListener("click", async () => {
+            try {
+                if (document.pictureInPictureElement === video) {
+                    await document.exitPictureInPicture();
+                } else {
+                    if (!video.srcObject || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+                        throw new Error("The video is not ready yet.");
+                    }
+                    await video.requestPictureInPicture();
+                }
+            } catch (error) {
+                console.warn(`[VIDEO] ${label} PiP unavailable:`, error);
+                alert(`Could not open ${label} in Picture-in-Picture. Make sure the video is playing and your browser supports PiP.`);
+            }
+        });
+
+        const fullscreenButton = document.createElement("button");
+        fullscreenButton.type = "button";
+        fullscreenButton.className = "video-tool-button";
+        fullscreenButton.textContent = "⛶ Full screen";
+        fullscreenButton.title = `View ${label} full screen`;
+        fullscreenButton.setAttribute("aria-label", `View ${label} full screen`);
+
+        fullscreenButton.addEventListener("click", async () => {
+            try {
+                if (document.fullscreenElement === viewport) {
+                    await document.exitFullscreen();
+                } else if (viewport.requestFullscreen) {
+                    await viewport.requestFullscreen();
+                } else {
+                    throw new Error("Fullscreen API is not supported by this browser.");
+                }
+            } catch (error) {
+                console.warn(`[VIDEO] ${label} fullscreen unavailable:`, error);
+                alert(`Could not open ${label} in full screen. Your browser may block this feature.`);
+            }
+        });
+
+        document.addEventListener("fullscreenchange", () => {
+            const active = document.fullscreenElement === viewport;
+            fullscreenButton.textContent = active ? "⛶ Exit full screen" : "⛶ Full screen";
+        });
+
+        tools.append(pipButton, fullscreenButton);
+        viewport.appendChild(tools);
+    }
+
+    // -------------------------
     // Four-panel console
     // -------------------------
     function ensureOperatorPanel() {
@@ -376,6 +441,8 @@ export function createUi(handlers = {}) {
                 ?.classList.add("hidden");
             cameraPanel?.querySelector(".camera-info")
                 ?.classList.add("hidden");
+
+            addVideoControls(robotCameraMount, remoteVideo, "Robot camera");
         }
 
         // Operator webcam: visible video with landmarks overlaid.
@@ -406,6 +473,8 @@ export function createUi(handlers = {}) {
             operatorCanvas.style.zIndex = "2";
             operatorCanvas.style.pointerEvents = "none";
         }
+
+        addVideoControls(operatorVideo?.parentElement, operatorVideo, "Hand-tracking camera");
 
         $("startTrackingButton")?.addEventListener(
             "click", () => call("onStartTracking")
@@ -498,6 +567,41 @@ export function createUi(handlers = {}) {
                 background: #080c12;
                 border-radius: 8px;
                 aspect-ratio: 4 / 3;
+            }
+
+            .teleop-viewport:fullscreen {
+                width: 100vw;
+                height: 100vh;
+                min-height: 0;
+                aspect-ratio: auto;
+                border-radius: 0;
+                background: #000;
+            }
+
+            .video-tools {
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                z-index: 20;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 7px;
+            }
+
+            .video-tool-button {
+                padding: 7px 10px;
+                border: 1px solid rgba(255,255,255,.24);
+                border-radius: 6px;
+                background: rgba(12,18,28,.88);
+                color: #fff;
+                font-size: 12px;
+                cursor: pointer;
+                backdrop-filter: blur(5px);
+            }
+
+            .video-tool-button:disabled {
+                opacity: .45;
+                cursor: not-allowed;
             }
 
             #operatorCanvas,

@@ -29,11 +29,35 @@
   const SEND_INTERVAL_MS = 33; // approximately 30 Hz
   const YAW_LIMIT_DEG = 80;    // GX: +/-80 degrees
   const ROLL_LIMIT_DEG = 60;   // Roll: +/-60 degrees
-  const MAX_RATE_DEG_S = 100;  // limits sudden per-frame changes
-  const FILTER_ALPHA = 0.22;  // lower = smoother, higher = more responsive
+  const MAX_RATE_DEG_S = 250;  // spike guard on the filtered output (One Euro handles smoothing)
+  // One Euro filter (degrees): lower MIN_CUTOFF = steadier at rest, higher BETA = less lag on fast turns.
+  const ONE_EURO_MIN_CUTOFF = 1.0;
+  const ONE_EURO_BETA = 0.03;
+  const ONE_EURO_D_CUTOFF = 1.0;
   const DEADBAND_DEG = 0.35;
   const toRad = (d) => d * Math.PI / 180;
   const toDeg = (r) => r * 180 / Math.PI;
+
+  // One Euro filter: heavy smoothing when the phone is still, light smoothing when it moves fast.
+  class OneEuro {
+    constructor(minCutoff, beta, dCutoff) {
+      this.minCutoff = minCutoff; this.beta = beta; this.dCutoff = dCutoff;
+      this.reset();
+    }
+    reset() { this.x = null; this.dx = 0; this.t = 0; }
+    static alpha(cutoff, dt) { const tau = 1 / (2 * Math.PI * cutoff); return 1 / (1 + tau / dt); }
+    filter(v, t) { // v in degrees, t in seconds
+      if (this.x === null) { this.x = v; this.t = t; return v; }
+      const dt = Math.max(t - this.t, 1e-3); this.t = t;
+      const ad = OneEuro.alpha(this.dCutoff, dt);
+      this.dx = ad * ((v - this.x) / dt) + (1 - ad) * this.dx;
+      const a = OneEuro.alpha(this.minCutoff + this.beta * Math.abs(this.dx), dt);
+      this.x = a * v + (1 - a) * this.x;
+      return this.x;
+    }
+  }
+  const yawFilter = new OneEuro(ONE_EURO_MIN_CUTOFF, ONE_EURO_BETA, ONE_EURO_D_CUTOFF);
+  const rollFilter = new OneEuro(ONE_EURO_MIN_CUTOFF, ONE_EURO_BETA, ONE_EURO_D_CUTOFF);
 
   function status(message, activeState = false) {
     $("status").textContent = message;
@@ -283,6 +307,8 @@
     smoothedYaw = 0;
     smoothedRoll = 0;
     lastFilterTime = 0;
+    yawFilter.reset();
+    rollFilter.reset();
     $("gx").textContent = "0.0°";
     $("gy").textContent = "0.0°";
     status("Calibrated — turn left/right for yaw; tilt up/down for roll", true);
@@ -310,17 +336,18 @@
     yawContinuous = unwrap(yawContinuous, yawPrincipal);
     rollContinuous = unwrap(rollContinuous, rollPrincipal);
 
-    // Clamp raw targets, then rate-limit and low-pass filter them to suppress jumps.
+    // Clamp raw targets, then One Euro filter them and cap the output rate to suppress jumps.
     const targetYaw = Math.max(-YAW_LIMIT_DEG, Math.min(YAW_LIMIT_DEG, toDeg(yawContinuous)));
     const targetRoll = Math.max(-ROLL_LIMIT_DEG, Math.min(ROLL_LIMIT_DEG, toDeg(rollContinuous)));
     const now = Date.now();
     const dt = lastFilterTime ? Math.min((now - lastFilterTime) / 1000, 0.1) : 1 / 30;
     lastFilterTime = now;
     const maxStep = MAX_RATE_DEG_S * dt;
-    const limitedYaw = Math.max(smoothedYaw - maxStep, Math.min(smoothedYaw + maxStep, targetYaw));
-    const limitedRoll = Math.max(smoothedRoll - maxStep, Math.min(smoothedRoll + maxStep, targetRoll));
-    smoothedYaw += (limitedYaw - smoothedYaw) * FILTER_ALPHA;
-    smoothedRoll += (limitedRoll - smoothedRoll) * FILTER_ALPHA;
+    const t = event.timeStamp / 1000;
+    const filteredYaw = yawFilter.filter(targetYaw, t);
+    const filteredRoll = rollFilter.filter(targetRoll, t);
+    smoothedYaw = Math.max(smoothedYaw - maxStep, Math.min(smoothedYaw + maxStep, filteredYaw));
+    smoothedRoll = Math.max(smoothedRoll - maxStep, Math.min(smoothedRoll + maxStep, filteredRoll));
 
     const yaw = Math.abs(smoothedYaw) < DEADBAND_DEG ? 0 : -smoothedYaw;
     const roll = Math.abs(smoothedRoll) < DEADBAND_DEG ? 0 : -smoothedRoll;

@@ -1,0 +1,8 @@
+# ============================================================
+# Signaling + authentication server (server.py)
+# Install only this part:  ./install.sh server
+# ============================================================
+fastapi>=0.110         # web framework (REST login + WebSocket signaling)
+uvicorn>=0.29          # ASGI server:  uvicorn server.server:app
+pydantic>=2.6          # request models
+websockets>=12.0       # WebSocket support for uvicorn

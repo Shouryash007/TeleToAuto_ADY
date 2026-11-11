@@ -49,6 +49,14 @@
     .video-wrap:fullscreen.vr-mode .video-view { object-fit:contain; }
     .video-wrap:fullscreen .video-toolbar { top:max(12px, env(safe-area-inset-top)); right:max(12px, env(safe-area-inset-right)); }
     .video-wrap:fullscreen .video-menu { top:64px; right:max(12px, env(safe-area-inset-right)); }
+    .video-wrap.fallback-fullscreen {
+      position:fixed; inset:0; z-index:99999; width:100vw; height:100dvh;
+      max-width:none; aspect-ratio:auto; border-radius:0; background:#000;
+    }
+    .video-wrap.fallback-fullscreen .video-views { width:100%; height:100%; }
+    .video-wrap.fallback-fullscreen .video-view { object-fit:contain; }
+    .video-wrap.fallback-fullscreen.vr-mode .video-view { object-fit:contain; }
+    body.video-fallback-open { overflow:hidden; }
     @media (max-width:560px) { body { padding:12px; } .card { padding:15px; } }
   </style>
 </head>
@@ -109,5 +117,145 @@
   </section>
 </main>
 <script src="/mobile-gyro.js"></script>
+<script>
+(() => {
+  "use strict";
+
+  const wrap = document.getElementById("cameraVideoWrap");
+  const menuButton = document.getElementById("cameraMenuButton");
+  const menu = document.getElementById("cameraVideoMenu");
+  const fullscreenButton = document.getElementById("cameraFullscreenButton");
+  const normalButton = document.getElementById("normalVideoButton");
+  const vrButton = document.getElementById("vrVideoButton");
+  const leftVideo = document.getElementById("robotCameraVideo");
+  const rightVideo = document.getElementById("robotCameraVideoRight");
+
+  if (!wrap || !menuButton || !menu || !fullscreenButton ||
+      !normalButton || !vrButton || !leftVideo || !rightVideo) {
+    console.error("[CAMERA UI] Required camera controls are missing.");
+    return;
+  }
+
+  function setMenu(open) {
+    menu.classList.toggle("hidden", !open);
+    menuButton.setAttribute("aria-expanded", String(open));
+  }
+
+  function syncRightVideo() {
+    if (!wrap.classList.contains("vr-mode")) return;
+    const stream = leftVideo.srcObject;
+    if (stream && rightVideo.srcObject !== stream) {
+      rightVideo.srcObject = stream;
+      rightVideo.play().catch(() => {});
+    }
+  }
+
+  function setViewMode(vrEnabled) {
+    wrap.classList.toggle("vr-mode", vrEnabled);
+    if (vrEnabled) {
+      syncRightVideo();
+      // If the stream arrives after VR mode is selected, mirror it when ready.
+      leftVideo.addEventListener("loadedmetadata", syncRightVideo, { once: true });
+      rightVideo.setAttribute("aria-hidden", "false");
+    } else {
+      rightVideo.pause();
+      rightVideo.srcObject = null;
+      rightVideo.setAttribute("aria-hidden", "true");
+    }
+    setMenu(false);
+  }
+
+  async function enterFullscreen() {
+    if (document.fullscreenElement === wrap ||
+        document.webkitFullscreenElement === wrap ||
+        wrap.classList.contains("fallback-fullscreen")) {
+      await exitFullscreen();
+      return;
+    }
+
+    setMenu(false);
+    try {
+      if (wrap.requestFullscreen) {
+        await wrap.requestFullscreen();
+      } else if (wrap.webkitRequestFullscreen) {
+        wrap.webkitRequestFullscreen();
+      } else {
+        // Fallback for mobile browsers without element fullscreen support.
+        wrap.classList.add("fallback-fullscreen");
+        document.body.classList.add("video-fallback-open");
+      }
+    } catch (error) {
+      console.warn("[CAMERA UI] Fullscreen request failed; using fallback:", error);
+      wrap.classList.add("fallback-fullscreen");
+      document.body.classList.add("video-fallback-open");
+    }
+    updateFullscreenButton();
+  }
+
+  async function exitFullscreen() {
+    try {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        await document.exitFullscreen();
+      } else if (document.webkitFullscreenElement && document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      }
+    } catch (error) {
+      console.warn("[CAMERA UI] Could not exit native fullscreen:", error);
+    }
+    wrap.classList.remove("fallback-fullscreen");
+    document.body.classList.remove("video-fallback-open");
+    updateFullscreenButton();
+  }
+
+  function updateFullscreenButton() {
+    const isFullscreen =
+      document.fullscreenElement === wrap ||
+      document.webkitFullscreenElement === wrap ||
+      wrap.classList.contains("fallback-fullscreen");
+    fullscreenButton.textContent = isFullscreen ? "⤢" : "⛶";
+    fullscreenButton.setAttribute(
+      "aria-label",
+      isFullscreen ? "Exit full screen" : "Enter full screen"
+    );
+    fullscreenButton.title = isFullscreen ? "Exit full screen" : "Full screen";
+  }
+
+  menuButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setMenu(menu.classList.contains("hidden"));
+  });
+
+  normalButton.addEventListener("click", () => setViewMode(false));
+  vrButton.addEventListener("click", () => setViewMode(true));
+  fullscreenButton.addEventListener("click", enterFullscreen);
+
+  document.addEventListener("click", (event) => {
+    if (!menu.contains(event.target) && event.target !== menuButton) {
+      setMenu(false);
+    }
+  });
+
+  document.addEventListener("fullscreenchange", updateFullscreenButton);
+  document.addEventListener("webkitfullscreenchange", updateFullscreenButton);
+
+  // Keep the right-eye view synchronized if the WebRTC stream is attached later.
+  leftVideo.addEventListener("loadedmetadata", syncRightVideo);
+  leftVideo.addEventListener("emptied", () => {
+    rightVideo.pause();
+    rightVideo.srcObject = null;
+  });
+
+  // Escape exits the CSS fallback on browsers without Fullscreen API support.
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && wrap.classList.contains("fallback-fullscreen")) {
+      wrap.classList.remove("fallback-fullscreen");
+      document.body.classList.remove("video-fallback-open");
+      updateFullscreenButton();
+    }
+  });
+
+  updateFullscreenButton();
+})();
+</script>
 </body>
 </html>
