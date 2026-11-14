@@ -55,7 +55,7 @@ const ARM_CHAINS = {
 };
 
 const CFG = {
-  // Neutral gripper position, measured from the shoulder-pan joint origin (robot frame:
+  // Neutral tool position, measured from the shoulder-pan joint origin (robot frame:
   // +X forward, +Y left, +Z up), and the neutral tool pitch (sum of lift+elbow+wrist_flex, rad).
   // Home / range were chosen by measuring this arm's reachable workspace: with the tool
   // pitch left free (pitchWeight 0) the arm can reach about +-0.11 m forward/back,
@@ -63,10 +63,10 @@ const CFG = {
   home: [0.28, 0.012, -0.24], homePitch: 0.4,
   range: [0.09, 0.20, 0.09], handSpanX: 0.22, handSpanY: 0.20,   // spans = UNCALIBRATED defaults
   depthSpan: 0.35, depthSign: 1, lateralSign: 1, rollGain: 1, rollSign: 1,
-  pitchWeight: 0, nullGain: 0.05, damping: 0.05, iterations: 25, maxJointSpeed: 3.0,
+  pitchWeight: 0, rollTaskWeight: 0.06, nullGain: 0.05, damping: 0.06, iterations: 35, maxJointSpeed: 3.0,
   // Input filtering. Lower smoothing = smoother but laggier.
   smoothing: 0.25, deadband: 0.004, lostHoldMs: 500,
-  pinchClosed: 0.25, pinchOpen: 0.95,
+  pinchClosed: 0.22, pinchOpen: 0.65,
   gripperOpen: 1.2, gripperClosed: 0, staleMs: 500,
   // MediaPipe assumes a mirrored (selfie) image. The tracker feeds the raw, un-mirrored
   // webcam frame, so MediaPipe's "Left" label is the operator's RIGHT hand. Swapping makes the
@@ -154,7 +154,7 @@ class ArmKinematics {
     this.lower=chain.joints.map(j=>j[2][0]);
     this.upper=chain.joints.map(j=>j[2][1]);
     this.tip=chain.tip;
-    // lift, elbow and wrist_flex share one axis, so tool pitch is the sum of those angles.
+    // Kept for home-pose setup; runtime IK now solves XYZ and wrist-roll together.
     this.pitchSigns=[0,1,1,1,0];
     this.targetPitch=CFG.homePitch;
   }
@@ -177,33 +177,51 @@ class ArmKinematics {
   }
   pitch(q){return dot(this.pitchSigns,q);}
   solve(q0,target,roll,qNeutral=null){
-    const q=q0.slice(), idx=[0,1,2,3];
+    // Solve the gripper/tool-frame XYZ position and wrist roll in one DLS task.
+    // The previous solver excluded joint 5 from the position Jacobian and then
+    // overwrote it with the hand roll. That left the end-effector position
+    // slightly wrong whenever wrist roll rotated the non-zero tool offset.
+    const q=q0.slice();
+    const n=5, w=CFG.rollTaskWeight;
     for(let iter=0;iter<CFG.iterations;iter++){
       const {p}=this.fkFull(q), e=sub(target,p), err=norm(e);
       const Jcols=this.jacobian(q);
-      const pitchErr=this.targetPitch-this.pitch(q);
-      const rows=3+(CFG.pitchWeight>0?1:0);
-      const J=Array.from({length:rows},(_,r)=>idx.map(i=>r<3?Jcols[i][r]:CFG.pitchWeight*this.pitchSigns[i]));
-      const ev=[...e,...(rows===4?[CFG.pitchWeight*pitchErr]:[])];
+      const rollErr=wrap(roll-q[4]);
+      const J=[
+        Jcols.map(c=>c[0]),
+        Jcols.map(c=>c[1]),
+        Jcols.map(c=>c[2]),
+        [0,0,0,0,w]
+      ];
+      const ev=[e[0],e[1],e[2],w*rollErr];
+      const rows=4;
       const A=Array.from({length:rows},(_,r)=>Array.from({length:rows},(_,c)=>{
-        let s=0;for(let k=0;k<idx.length;k++)s+=J[r][k]*J[c][k];
-        return s+(r===c?CFG.damping**2:0);
+        let sum=0;
+        for(let k=0;k<n;k++) sum+=J[r][k]*J[c][k];
+        return sum+(r===c?CFG.damping**2:0);
       }));
       const y=solveLinear(A,ev);
-      let dq=idx.map((_,k)=>{let s=0;for(let r=0;r<rows;r++)s+=J[r][k]*y[r];return s;});
-      if(qNeutral && CFG.nullGain>0 && rows<idx.length){
-        // Null-space pull toward the neutral posture: keeps the redundant joint
-        // (wrist_flex) from drifting while the gripper position is tracked.
-        const v=idx.map(k=>CFG.nullGain*(qNeutral[k]-q[k]));
-        const Jv=J.map(row=>row.reduce((s,x,k)=>s+x*v[k],0));
+      let dq=Array.from({length:n},(_,k)=>{
+        let sum=0;
+        for(let r=0;r<rows;r++) sum+=J[r][k]*y[r];
+        return sum;
+      });
+
+      // Redundancy resolution: softly keep the arm near its neutral posture
+      // without sacrificing the end-effector task.
+      if(qNeutral && CFG.nullGain>0){
+        const v=q.map((value,k)=>CFG.nullGain*(qNeutral[k]-value));
+        const Jv=J.map(row=>row.reduce((sum,x,k)=>sum+x*v[k],0));
         const z=solveLinear(A,Jv);
-        dq=dq.map((d,k)=>d+v[k]-J.reduce((s,row,r)=>s+row[k]*z[r],0));
+        dq=dq.map((value,k)=>value+v[k]-J.reduce((sum,row,r)=>sum+row[k]*z[r],0));
       }
-      const m=Math.max(...dq.map(Math.abs));
-      const scale=m>0.25?0.25/m:1;
-      idx.forEach((joint,k)=>q[joint]=clamp(q[joint]+dq[k]*scale,this.lower[joint],this.upper[joint]));
-      q[4]=clamp(roll,this.lower[4],this.upper[4]);
-      if(err<0.0005 && Math.abs(pitchErr)<0.02) break;
+
+      const maxDelta=Math.max(...dq.map(Math.abs));
+      const scale=maxDelta>0.20?0.20/maxDelta:1;
+      for(let k=0;k<n;k++){
+        q[k]=clamp(q[k]+dq[k]*scale,this.lower[k],this.upper[k]);
+      }
+      if(err<0.001 && Math.abs(rollErr)<0.015) break;
     }
     return q;
   }
@@ -516,8 +534,9 @@ export function createDualHandIKController(options={}) {
       if(pinchOk){
         const t=clamp((s.smoothed.pinch-CFG.pinchClosed)/(CFG.pinchOpen-CFG.pinchClosed),0,1);
         s.grip=CFG.gripperClosed+t*(CFG.gripperOpen-CFG.gripperClosed);
-        // Hysteresis so the gripper does not chatter around the threshold.
-        if(!s.closed && t<0.35) s.closed=true; else if(s.closed && t>0.65) s.closed=false;
+        // Continuous grip: every pinch-distance change produces a proportional
+        // 0..100 command. The bridge applies rate limiting to avoid abrupt motion.
+        s.closed = t < 0.5;
       } // else: fingers occluded / predicted -> gripper holds its last state
     }
 
@@ -544,7 +563,10 @@ export function createDualHandIKController(options={}) {
   return {
     updateFromHands,
     getTargets:output,
-    getGripperClosed:()=>({left:states.left.closed,right:states.right.closed}),
+    // Continuous gripper command: 0 = fully open, 100 = fully closed.
+    getGripperPercent:()=>({left:gripPercent(states.left),right:gripPercent(states.right)}),
+    // Backward-compatible status helper; do not use this for motor commands.
+    getGripperClosed:()=>({left:gripPercent(states.left)>=50,right:gripPercent(states.right)>=50}),
     isFresh:(now=Date.now())=>lastUpdate>0&&now-lastUpdate<=CFG.staleMs,
     markStale:()=>{lastUpdate=0;},
     getJointRadians:()=>Object.fromEntries(SIDES.map(side=>[side,states[side].q.slice()])),

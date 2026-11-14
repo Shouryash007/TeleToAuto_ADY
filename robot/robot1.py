@@ -57,7 +57,8 @@ MAX_ABS_JOINT_DEG = float(os.getenv("MAX_ABS_JOINT_DEG", "180"))
 # ROS 2 position controllers consume radians. Keep the WebRTC/browser protocol
 # in degrees, then attach an explicit radian representation for the local bridge.
 GRIPPER_CLOSED_RAD = float(os.getenv("GRIPPER_CLOSED_RAD", "0.0"))
-GRIPPER_OPEN_RAD = float(os.getenv("GRIPPER_OPEN_RAD", "1.2"))
+RIGHT_GRIPPER_OPEN_RAD = float(os.getenv("RIGHT_GRIPPER_OPEN_RAD", "-1.2"))
+LEFT_GRIPPER_OPEN_RAD = float(os.getenv("LEFT_GRIPPER_OPEN_RAD", "-1.5"))
 
 simulation_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -105,9 +106,9 @@ def send_to_gazebo(payload):
             gripper = outgoing.get("gripper", {})
             outgoing["gripper_rad"] = {
                 side: (
-                    GRIPPER_CLOSED_RAD
-                    if bool(gripper.get(f"{side}_closed", False))
-                    else GRIPPER_OPEN_RAD
+                    (LEFT_GRIPPER_OPEN_RAD if side == "left" else RIGHT_GRIPPER_OPEN_RAD)
+                    + (float(gripper.get(f"{side}_percent", 0.0)) / 100.0)
+                    * (0.0 - (LEFT_GRIPPER_OPEN_RAD if side == "left" else RIGHT_GRIPPER_OPEN_RAD))
                 )
                 for side in ("left", "right")
             }
@@ -303,11 +304,24 @@ def validate_joint_targets(data):
     if not isinstance(gripper, dict):
         print("[SAFETY] Rejecting invalid gripper payload")
         return None
-    # Frontend currently sends boolean left_closed/right_closed.
-    normalized_gripper = {
-        "left_closed": bool(gripper.get("left_closed", False)),
-        "right_closed": bool(gripper.get("right_closed", False)),
-    }
+
+    normalized_gripper = {}
+    for side in ("left", "right"):
+        percent_key = f"{side}_percent"
+        legacy_key = f"{side}_closed"
+        if percent_key in gripper:
+            percent = finite_number(gripper.get(percent_key))
+            if percent is None or not 0.0 <= percent <= 100.0:
+                print(f"[SAFETY] Rejecting invalid {percent_key}={gripper.get(percent_key)!r}")
+                return None
+        elif isinstance(gripper.get(legacy_key, False), bool):
+            # Backward compatibility with old binary clients.
+            percent = 100.0 if gripper.get(legacy_key, False) else 0.0
+        else:
+            print(f"[SAFETY] Rejecting invalid gripper command for {side}")
+            return None
+        normalized_gripper[percent_key] = percent
+
     return {
         "type": "joint_targets",
         "sequence": data.get("sequence"),
@@ -380,19 +394,11 @@ async def create_webrtc_session(websocket, viewer):
     pc = RTCPeerConnection(RTC_CONFIG)
     camera = GazeboCameraVideoTrack()
     pc.addTrack(camera)
-    joint_channel = imu_channel = None
+    imu_channel = None
     if viewer == "browser":
-        joint_channel = pc.createDataChannel("joint-control")
+        # Joint targets no longer use a WebRTC DataChannel. They arrive through
+        # the authenticated browser -> server -> robot WebSocket route.
         imu_channel = pc.createDataChannel("imu-control")
-
-        @joint_channel.on("message")
-        def on_joint(message):
-            try:
-                if isinstance(message, bytes): message = message.decode()
-                packet = validate_joint_targets(json.loads(message))
-                if packet: send_to_gazebo(packet)
-                else: print("[DATA] Dropped invalid joint packet")
-            except Exception as exc: print("[DATA] Joint message error:", repr(exc))
 
         @imu_channel.on("message")
         def on_imu(message):
@@ -416,7 +422,7 @@ async def create_webrtc_session(websocket, viewer):
         "type": pc.localDescription.type, "sdp": pc.localDescription.sdp, "viewer": viewer
     }))
     print(f"[WEBRTC] {viewer} offer sent")
-    return {"pc": pc, "camera": camera, "joint": joint_channel, "imu": imu_channel}
+    return {"pc": pc, "camera": camera, "joint": None, "imu": imu_channel}
 
 
 
@@ -433,6 +439,12 @@ async def run_robot():
                     kind = data.get("type")
                     if kind == "authenticated":
                         print("[ROBOT] Signaling authentication successful")
+                    elif kind == "joint_targets":
+                        packet = validate_joint_targets(data)
+                        if packet:
+                            send_to_gazebo(packet)
+                        else:
+                            print("[SERVER WS] Dropped invalid joint packet")
                     elif kind in ("browser_ready", "mobile_ready"):
                         viewer = "browser" if kind == "browser_ready" else "mobile"
                         previous = peers.pop(viewer, None)

@@ -16,6 +16,7 @@ import time
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float64MultiArray
+from sensor_msgs.msg import JointState
 
 
 ARM_KEYS = (
@@ -124,7 +125,15 @@ class HumanoidArmBridge(Node):
         self.last_log = time.monotonic()
 
         self.targets = {}   # side -> latest 6 joint targets (rad)
-        self.current = {}   # side -> last published 6 joint values (rad)
+        self.current = {}   # side -> ramped command state (rad)
+        self.measured = {}  # side -> latest measured joint state (rad)
+        self.joint_name_map = {
+            "right": ("Revolute_23", "Revolute_24", "Revolute_25", "Revolute_26", "Revolute_27", "Revolute_28"),
+            "left":  ("Revolute_32", "Revolute_33", "Revolute_34", "Revolute_35", "Revolute_36", "Revolute_37"),
+        }
+        self.joint_state_sub = self.create_subscription(
+            JointState, "/joint_states", self.on_joint_state, 20
+        )
         self.last_step = time.monotonic()
 
         rate = max(10.0, float(self.get_parameter("publish_rate_hz").value))
@@ -140,8 +149,16 @@ class HumanoidArmBridge(Node):
             f"Arm bridge listening on {self.host}:{self.port}"
         )
         self.get_logger().info(
-            "Publishing left and right arm commands only."
+            "Publishing left and right arm commands; first target is synchronized "
+            "from /joint_states when available."
         )
+
+    def on_joint_state(self, message):
+        positions = dict(zip(message.name, message.position))
+        for side, names in self.joint_name_map.items():
+            values = [finite(positions.get(name)) for name in names]
+            if all(value is not None for value in values):
+                self.measured[side] = values
 
     def _fresh(self, packet):
         received = finite(packet.get("received_at"))
@@ -222,21 +239,31 @@ class HumanoidArmBridge(Node):
 
                 radians.append(math.radians(degrees))
 
-            closed = gripper.get(f"{side}_closed")
+            percent = gripper.get(f"{side}_percent")
+            if percent is None:
+                # Backward compatibility with old binary packets.
+                closed = gripper.get(f"{side}_closed")
+                if not isinstance(closed, bool):
+                    self.get_logger().warning(
+                        f"Dropped invalid {side} gripper command"
+                    )
+                    return
+                percent = 100.0 if closed else 0.0
 
-            if not isinstance(closed, bool):
+            percent = finite(percent)
+            if percent is None or not 0.0 <= percent <= 100.0:
                 self.get_logger().warning(
-                    f"Dropped invalid {side} gripper state"
+                    f"Dropped invalid {side} gripper percentage"
                 )
                 return
 
-            grip_value = float(
-                self.get_parameter(
-                    f"{side}_gripper_closed_rad"
-                    if closed
-                    else f"{side}_gripper_open_rad"
-                ).value
-            )
+            open_rad = float(self.get_parameter(
+                f"{side}_gripper_open_rad"
+            ).value)
+            closed_rad = float(self.get_parameter(
+                f"{side}_gripper_closed_rad"
+            ).value)
+            grip_value = open_rad + (percent / 100.0) * (closed_rad - open_rad)
 
             if not math.isfinite(grip_value):
                 return
@@ -254,7 +281,12 @@ class HumanoidArmBridge(Node):
                 for v, (lo, hi) in zip(values, JOINT_LIMITS[side])
             ]
             if side not in self.current:
-                self.current[side] = list(self.targets[side])
+                # Start the rate limiter from Gazebo's measured pose when joint
+                # states are available, instead of jumping directly to the first
+                # hand-derived target. Fall back to the target if /joint_states
+                # has not arrived yet.
+                measured = self.measured.get(side)
+                self.current[side] = list(measured if measured is not None else self.targets[side])
 
         self.joint_count += 1
         self.periodic_log()

@@ -8,8 +8,8 @@ export const CONTROL = {
     smoothingAlpha: 0.35,
 
     // Proportional Pinch thresholds
-    pinchCloseDistance: 0.04,
-    pinchOpenDistance: 0.10,
+    pinchCloseDistance: 0.035,
+    pinchOpenDistance: 0.075,
 
     swapHandedness: false,
 
@@ -160,7 +160,13 @@ export function createManipulatorController() {
         updateFromPose,
         updateFromHands,
         getTargets: () => JSON.parse(JSON.stringify(smoothedTargets)),
-        getGripperClosed: () => ({ left: smoothedTargets.left.gripper > 50, right: smoothedTargets.right.gripper > 50 }),
+        // Continuous command in percent: 0 = open, 100 = closed.
+        getGripperPercent: () => ({
+            left: clamp(smoothedTargets.left.gripper, 0, 100),
+            right: clamp(smoothedTargets.right.gripper, 0, 100),
+        }),
+        // Backward-compatible UI/status helper only.
+        getGripperClosed: () => ({ left: smoothedTargets.left.gripper >= 50, right: smoothedTargets.right.gripper >= 50 }),
         isFresh: (now = Date.now()) => lastArmUpdate > 0 && now - lastArmUpdate <= CONTROL.stalePoseMs,
         markStale: () => { lastArmUpdate = 0; }
     };

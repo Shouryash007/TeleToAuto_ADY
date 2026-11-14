@@ -72,6 +72,7 @@ export function createRobotConnection(handlers = {}) {
     let jointChannel = null;
     let imuChannel = null;
     let robotId = null;
+    let signalingAuthenticated = false;
 
     // Sequence numbers keep increasing across reconnects.
     let jointSequence = 0;
@@ -274,7 +275,10 @@ export function createRobotConnection(handlers = {}) {
             }
 
             if (data.type === "connected") {
-                notify("onSignalingStatus", "Signaling connected");
+                signalingAuthenticated = true;
+                notify("onSignalingStatus", "Server connected");
+                // Joint commands now use this authenticated browser-server WebSocket.
+                notify("onChannelState", "joint", "open");
 
             } else if (data.type === "offer") {
                 try {
@@ -286,6 +290,8 @@ export function createRobotConnection(handlers = {}) {
 
             } else if (data.type === "robot_disconnected") {
                 notify("onSignalingStatus", "Robot disconnected");
+                signalingAuthenticated = false;
+                notify("onChannelState", "joint", "closed");
                 closePeerConnection();
                 notify("onRobotDisconnected");
 
@@ -311,6 +317,11 @@ export function createRobotConnection(handlers = {}) {
 
         ws.onclose = () => {
             console.log("[SIGNAL] WebSocket closed");
+            if (websocket === ws) {
+                signalingAuthenticated = false;
+                notify("onChannelState", "joint", "closed");
+                notify("onSignalingStatus", "Server disconnected");
+            }
         };
     }
 
@@ -320,6 +331,8 @@ export function createRobotConnection(handlers = {}) {
         const ws = websocket;
         websocket = null;
         robotId = null;
+        signalingAuthenticated = false;
+        notify("onChannelState", "joint", "closed");
 
         if (ws) {
             try {
@@ -341,8 +354,9 @@ export function createRobotConnection(handlers = {}) {
         );
     }
 
+    // Joint control is server-mediated; it does not depend on WebRTC state.
     const isJointChannelOpen = () =>
-        peerUsable() && jointChannel?.readyState === "open";
+        signalingAuthenticated && websocket?.readyState === WebSocket.OPEN;
 
     const isImuChannelOpen = () =>
         peerUsable() && imuChannel?.readyState === "open";
@@ -351,10 +365,17 @@ export function createRobotConnection(handlers = {}) {
     // Robot commands (existing packet formats)
     // -------------------------
 
-    // arms:    { left: {...5 joints + gripper}, right: {...} }  degrees
-    // gripper: { left: bool, right: bool }  (closed)
-    function sendJointTargets(arms, gripperClosed) {
+    // Arms are sent in degrees. Gripper percentages are continuous: 0=open, 100=closed.
+    // This packet travels browser -> authenticated server WebSocket -> robot WebSocket.
+    function sendJointTargets(arms, gripperPercent) {
         if (!isJointChannelOpen()) return false;
+
+        const leftPercent = Number(gripperPercent?.left);
+        const rightPercent = Number(gripperPercent?.right);
+        if (
+            !Number.isFinite(leftPercent) || leftPercent < 0 || leftPercent > 100 ||
+            !Number.isFinite(rightPercent) || rightPercent < 0 || rightPercent > 100
+        ) return false;
 
         const packet = {
             type: "joint_targets",
@@ -367,16 +388,16 @@ export function createRobotConnection(handlers = {}) {
                 right: arms.right
             },
             gripper: {
-                left_closed: gripperClosed.left,
-                right_closed: gripperClosed.right
+                left_percent: leftPercent,
+                right_percent: rightPercent
             }
         };
 
         try {
-            jointChannel.send(JSON.stringify(packet));
+            websocket.send(JSON.stringify(packet));
             return true;
         } catch (error) {
-            console.error("[CONTROL] Joint send failed:", error);
+            console.error("[CONTROL] Server-mediated joint send failed:", error);
             return false;
         }
     }

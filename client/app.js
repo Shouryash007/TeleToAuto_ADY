@@ -151,7 +151,17 @@ function sendJointTargets() {
         setStatus("controlTransmissionStatus", "PAUSED — STALE POSE");
         return;
     }
-    robot.sendJointTargets(targets, manipulator.getGripperClosed());
+    let gripperPercent;
+    if (typeof manipulator.getGripperPercent === "function") {
+        gripperPercent = manipulator.getGripperPercent();
+    } else {
+        const closed = manipulator.getGripperClosed();
+        gripperPercent = {
+            left: closed.left ? 100 : 0,
+            right: closed.right ? 100 : 0
+        };
+    }
+    robot.sendJointTargets(targets, gripperPercent);
     ui.updateJointTargets(targets);
 }
 

@@ -168,10 +168,83 @@ async def _forward_from_robot(robot_id, data: dict, raw: str) -> None:
         print(f"[SIGNAL] {robot_id} -> {viewer}: {data.get('type')}")
 
 
+def _validate_joint_targets(data: dict):
+    """Validate browser hand-tracking commands before server-side routing."""
+    if data.get("type") != "joint_targets" or data.get("units") != "deg":
+        return None
+
+    try:
+        sent_ms = float(data.get("timestamp_ms"))
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(sent_ms) or abs(time.time() * 1000.0 - sent_ms) > 1000.0:
+        return None
+
+    arms = data.get("arms")
+    gripper = data.get("gripper")
+    if not isinstance(arms, dict) or not isinstance(gripper, dict):
+        return None
+
+    joint_names = ("shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll")
+    normalized_arms = {"left": {}, "right": {}}
+    for side in ("left", "right"):
+        side_values = arms.get(side)
+        if not isinstance(side_values, dict):
+            return None
+        for name in joint_names:
+            try:
+                value = float(side_values.get(name))
+            except (TypeError, ValueError):
+                return None
+            if not math.isfinite(value) or abs(value) > 180.0:
+                return None
+            normalized_arms[side][name] = value
+
+    normalized_gripper = {}
+    for side in ("left", "right"):
+        key = f"{side}_percent"
+        if key in gripper:
+            try:
+                percent = float(gripper[key])
+            except (TypeError, ValueError):
+                return None
+        else:
+            # Compatibility with older browser clients that sent a boolean.
+            legacy = gripper.get(f"{side}_closed", False)
+            if not isinstance(legacy, bool):
+                return None
+            percent = 100.0 if legacy else 0.0
+        if not math.isfinite(percent) or not 0.0 <= percent <= 100.0:
+            return None
+        normalized_gripper[key] = percent
+
+    return {
+        "type": "joint_targets",
+        "sequence": data.get("sequence"),
+        "timestamp_ms": sent_ms,
+        "units": "deg",
+        "source": data.get("source", "browser_hand_tracking"),
+        "arms": normalized_arms,
+        "gripper": normalized_gripper,
+    }
+
+
 async def _forward_from_browser(robot_id, data: dict, raw: str) -> None:
-    """BROWSER -> ROBOT"""
+    """BROWSER -> ROBOT. Joint targets are validated before forwarding."""
+    message_type = data.get("type")
+
+    if message_type == "joint_targets":
+        packet = _validate_joint_targets(data)
+        if packet is None:
+            print(f"[SAFETY] Rejected invalid browser joint packet for {robot_id}")
+            return
+        raw = json.dumps(packet, separators=(",", ":"))
+    elif message_type not in ("answer", "candidate"):
+        # Browser is not allowed to spoof server lifecycle or robot messages.
+        return
+
     if await manager.send_to_robot(robot_id, raw):
-        print(f"[SIGNAL] browser -> {robot_id}: {data.get('type')}")
+        print(f"[ROUTING] browser -> server -> {robot_id}: {message_type}")
 
 
 async def _forward_from_mobile(robot_id, data: dict) -> None:
